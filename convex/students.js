@@ -50,6 +50,14 @@ export const listLogins = internalQuery({
   },
 })
 
+export const listIdsAndLogins = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const students = await ctx.db.query('students').collect()
+    return students.map((s) => ({ id: s._id, login: s.login }))
+  },
+})
+
 export const insertStudent = internalMutation({
   args: {
     groupId: v.id('groups'),

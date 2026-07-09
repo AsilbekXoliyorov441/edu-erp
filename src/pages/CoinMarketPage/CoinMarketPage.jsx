@@ -95,6 +95,7 @@ export function CoinMarketPage() {
           <GiftGrid
             gifts={visibleGifts}
             balance={isTeacher ? null : balance}
+            showLink={isTeacher}
             actions={
               isTeacher
                 ? (gift) => (

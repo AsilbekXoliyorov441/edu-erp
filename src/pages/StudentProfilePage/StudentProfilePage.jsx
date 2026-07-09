@@ -122,6 +122,7 @@ export function StudentProfilePage() {
             <GiftGrid
               gifts={gifts}
               balance={balance}
+              showLink={canManage}
               actions={(gift, affordable) => {
                 if (!canManage) return null
                 if (!affordable) {

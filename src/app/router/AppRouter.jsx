@@ -12,6 +12,7 @@ import { StudentProfilePage } from '@/pages/StudentProfilePage/StudentProfilePag
 import { CoinMarketPage } from '@/pages/CoinMarketPage/CoinMarketPage'
 import { LeaderboardPage } from '@/pages/LeaderboardPage/LeaderboardPage'
 import { SettingsPage } from '@/pages/SettingsPage/SettingsPage'
+import { TeachersDashboardPage } from '@/pages/TeachersDashboardPage/TeachersDashboardPage'
 import { NotFoundPage } from '@/pages/NotFoundPage/NotFoundPage'
 
 export function AppRouter() {
@@ -53,6 +54,14 @@ export function AppRouter() {
             element={
               <RequireTeacher>
                 <SettingsPage />
+              </RequireTeacher>
+            }
+          />
+          <Route
+            path="teachers-dashboard"
+            element={
+              <RequireTeacher>
+                <TeachersDashboardPage />
               </RequireTeacher>
             }
           />

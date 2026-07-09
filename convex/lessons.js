@@ -20,8 +20,9 @@ export const saveSession = mutation({
     token: v.string(),
     groupId: v.id('groups'),
     scores: v.array(v.object({ studentId: v.id('students'), category: v.string(), value: v.number() })),
+    date: v.string(),
   },
-  handler: async (ctx, { token, groupId, scores }) => {
+  handler: async (ctx, { token, groupId, scores, date }) => {
     await requireTeacher(ctx, token)
 
     const groupLessons = await ctx.db
@@ -30,8 +31,7 @@ export const saveSession = mutation({
       .collect()
     const lessonNumber = groupLessons.length ? Math.max(...groupLessons.map((l) => l.lessonNumber)) + 1 : 1
     const monthIndex = Math.ceil(lessonNumber / LESSONS_PER_MONTH)
-    const now = new Date().toISOString()
-    const lessonId = await ctx.db.insert('lessons', { groupId, date: now, lessonNumber, monthIndex })
+    const lessonId = await ctx.db.insert('lessons', { groupId, date, lessonNumber, monthIndex })
 
     let entriesCount = 0
     let coinsGiven = 0
@@ -48,14 +48,14 @@ export const saveSession = mutation({
         category: score.category,
         value,
         maxValue,
-        givenAt: now,
+        givenAt: date,
       })
       await ctx.db.insert('transactions', {
         studentId: score.studentId,
         type: 'coin_given',
         amount: value,
         relatedEntryId: entryId,
-        timestamp: now,
+        timestamp: date,
       })
       entriesCount += 1
       coinsGiven += value

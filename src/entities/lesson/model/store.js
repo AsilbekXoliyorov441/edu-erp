@@ -11,7 +11,7 @@ export function useLessonStore(selector) {
 
   return selector({
     items,
-    saveSession: (groupId, scores) => saveSessionMutation({ token, groupId, scores }),
+    saveSession: (groupId, scores, date) => saveSessionMutation({ token, groupId, scores, date }),
     removeMany: (ids) => removeCascadeMutation({ token, ids }),
   })
 }

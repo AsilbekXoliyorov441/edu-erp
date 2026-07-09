@@ -10,7 +10,7 @@ function emptyScores(students) {
 /** Owns the in-progress lesson session draft; `save()` submits it as one atomic Convex
  * mutation that creates the Lesson + every non-zero CoinEntry + Transaction together —
  * the server computes the canonical lesson number/month, not this draft. */
-export function useLessonSession({ group, students }) {
+export function useLessonSession({ group, students, date }) {
   const [scores, setScores] = useState(() => emptyScores(students))
   const [saving, setSaving] = useState(false)
 
@@ -34,7 +34,7 @@ export function useLessonSession({ group, students }) {
     })
 
     try {
-      const result = await saveSession(group.id, scoreList)
+      const result = await saveSession(group.id, scoreList, date)
       toast.success(`✅ ${result.lessonNumber}-dars saqlandi — ${result.coinsGiven} coin, ${result.entriesCount} ta yozuv qo'shildi`)
       return result
     } finally {

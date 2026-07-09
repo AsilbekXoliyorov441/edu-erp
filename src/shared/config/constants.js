@@ -14,6 +14,10 @@ export const COIN_CATEGORY_LIST = Object.values(COIN_CATEGORIES)
 
 export const LESSONS_PER_MONTH = 12
 
+/** How many so'm one coin is worth — used to turn coin totals into money figures on the
+ * teacher finance dashboard. */
+export const COIN_TO_SOM_RATE = 130
+
 export const TRANSACTION_TYPES = {
   COIN_GIVEN: 'coin_given',
   GIFT_REDEEMED: 'gift_redeemed',
@@ -35,4 +39,5 @@ export const ROUTES = {
   COIN_MARKET: '/coin-market',
   LEADERBOARD: '/reyting',
   SETTINGS: '/sozlamalar',
+  TEACHERS_DASHBOARD: '/teachers-dashboard',
 }

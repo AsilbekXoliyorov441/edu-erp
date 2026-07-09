@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Gift as GiftIconLucide } from 'lucide-react'
+import { Gift as GiftIconLucide, ExternalLink } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
 import { Badge } from '@/shared/ui/badge'
 import { EmptyState } from '@/shared/ui/empty-state'
@@ -10,13 +10,15 @@ import { GiftIcon } from '@/entities/gift/ui/GiftIcon'
 /**
  * Catalog grid shared by the Coin Market page and the student-profile redeem panel.
  * `actions(gift, affordable)` renders the trailing control per gift — CRUD, redeem, or nothing.
+ * `showLink` reveals the source purchase link in the details modal — teacher views only,
+ * since students have no use for where to buy the gift.
  *
  * Uses an auto-fill grid (not fixed viewport breakpoints) so column count adapts to
  * whatever width the *parent* actually gives it — this grid gets embedded in both a
  * full-width page and a narrow split-column panel, and viewport breakpoints alone
  * can't tell those apart.
  */
-export function GiftGrid({ gifts, balance = null, actions }) {
+export function GiftGrid({ gifts, balance = null, actions, showLink = false }) {
   const [selectedGift, setSelectedGift] = useState(null)
 
   if (gifts.length === 0) {
@@ -100,6 +102,16 @@ export function GiftGrid({ gifts, balance = null, actions }) {
               </div>
               {selectedGift.description && (
                 <p className="text-sm text-muted-foreground">{selectedGift.description}</p>
+              )}
+              {showLink && selectedGift.link && (
+                <a
+                  href={selectedGift.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-fit items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  <ExternalLink className="size-4" /> Link
+                </a>
               )}
             </>
           )}

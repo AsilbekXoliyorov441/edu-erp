@@ -56,6 +56,10 @@ export function getCurrentCalendarMonthLabel() {
   return UZ_MONTHS[new Date().getMonth()]
 }
 
+export function formatUzMonthYear(year, monthIndex0) {
+  return `${UZ_MONTHS[monthIndex0]} ${year}`
+}
+
 export function getIsoWeekKey(isoString) {
   const date = new Date(isoString)
   const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))

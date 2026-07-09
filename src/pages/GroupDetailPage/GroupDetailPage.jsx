@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Play, Users2 } from 'lucide-react'
+import { ArrowLeft, Users2 } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
@@ -11,6 +11,7 @@ import { LessonSessionPanel } from '@/widgets/LessonSessionPanel/LessonSessionPa
 import { LessonsList } from '@/widgets/LessonsList/LessonsList'
 import { AddStudentDialog } from '@/features/add-student/ui/AddStudentDialog'
 import { DeleteGroupDialog } from '@/features/remove-group/ui/DeleteGroupDialog'
+import { StartLessonDialog } from '@/features/give-coin/ui/StartLessonDialog'
 import { useGroupStore } from '@/entities/group/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
 import { useLessonStore } from '@/entities/lesson/model/store'
@@ -23,6 +24,7 @@ import { ROUTES, STUDENT_STATUS } from '@/shared/config/constants'
 export function GroupDetailPage() {
   const { groupId } = useParams()
   const [sessionActive, setSessionActive] = useState(false)
+  const [lessonDate, setLessonDate] = useState(null)
 
   const groups = useGroupStore((s) => s.items)
   const students = useStudentStore((s) => s.items)
@@ -76,9 +78,13 @@ export function GroupDetailPage() {
         {!sessionActive && (
           <div className="flex flex-wrap items-center gap-2">
             <AddStudentDialog group={group} />
-            <Button onClick={() => setSessionActive(true)} disabled={groupStudents.length === 0} className="gap-1.5">
-              <Play className="size-4" /> Darsni boshlash
-            </Button>
+            <StartLessonDialog
+              disabled={groupStudents.length === 0}
+              onStart={(date) => {
+                setLessonDate(date)
+                setSessionActive(true)
+              }}
+            />
             <DeleteGroupDialog group={group} redirectAfter />
           </div>
         )}
@@ -90,8 +96,15 @@ export function GroupDetailPage() {
           students={groupStudents}
           nextLessonNumber={nextLessonNumber}
           monthIndex={monthIndex}
-          onDone={() => setSessionActive(false)}
-          onCancel={() => setSessionActive(false)}
+          date={lessonDate}
+          onDone={() => {
+            setSessionActive(false)
+            setLessonDate(null)
+          }}
+          onCancel={() => {
+            setSessionActive(false)
+            setLessonDate(null)
+          }}
         />
       ) : (
         <Tabs defaultValue="students">

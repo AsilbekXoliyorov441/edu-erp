@@ -50,7 +50,7 @@ export function GiftGrid({ gifts, balance = null, actions, showLink = false }) {
                       type="button"
                       onClick={() => setSelectedGift(gift)}
                       aria-label={`${gift.name} rasmini ko'rish`}
-                      className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/60 transition-transform hover:scale-105"
+                      className="flex size-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-border/60 outline-none transition-transform hover:scale-105"
                     >
                       {gift.image ? (
                         <img src={gift.image} alt={gift.name} className="size-full object-cover" />

@@ -20,8 +20,9 @@ export function useGiftStore(selector) {
 
   return selector({
     items,
-    create: ({ name, icon, price, image }) => createMutation({ token, name, icon, price, image }),
-    update: (id, { name, icon, price, image }) => updateMutation({ token, id, name, icon, price, image }),
+    create: ({ name, icon, price, image, category }) => createMutation({ token, name, icon, price, image, category }),
+    update: (id, { name, icon, price, image, category }) =>
+      updateMutation({ token, id, name, icon, price, image, category }),
     remove: (id) => removeMutation({ token, id }),
   })
 }

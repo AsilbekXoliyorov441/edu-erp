@@ -28,7 +28,7 @@ function RatingStepper({ value = 0, max, onChange, disabled = false, className }
             onClick={() => onChange(n === value ? 0 : n)}
             aria-label={`${n} ball qo'yish`}
             className={cn(
-              'size-5 rounded-full border-2 transition-all',
+              'size-5 cursor-pointer rounded-full border-2 outline-none transition-all',
               n <= value ? 'border-coin bg-coin' : 'border-border bg-transparent hover:border-coin/50',
               disabled && 'cursor-not-allowed opacity-50',
             )}

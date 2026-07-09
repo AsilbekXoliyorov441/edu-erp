@@ -10,10 +10,17 @@ export const list = query({
 })
 
 export const create = mutation({
-  args: { token: v.string(), name: v.string(), icon: v.string(), price: v.number(), image: v.optional(v.string()) },
-  handler: async (ctx, { token, name, icon, price, image }) => {
+  args: {
+    token: v.string(),
+    name: v.string(),
+    icon: v.string(),
+    price: v.number(),
+    image: v.optional(v.string()),
+    category: v.optional(v.string()),
+  },
+  handler: async (ctx, { token, name, icon, price, image, category }) => {
     await requireTeacher(ctx, token)
-    return await ctx.db.insert('gifts', { name, icon, price, image })
+    return await ctx.db.insert('gifts', { name, icon, price, image, category })
   },
 })
 
@@ -25,10 +32,11 @@ export const update = mutation({
     icon: v.string(),
     price: v.number(),
     image: v.optional(v.string()),
+    category: v.optional(v.string()),
   },
-  handler: async (ctx, { token, id, name, icon, price, image }) => {
+  handler: async (ctx, { token, id, name, icon, price, image, category }) => {
     await requireTeacher(ctx, token)
-    await ctx.db.patch(id, { name, icon, price, image })
+    await ctx.db.patch(id, { name, icon, price, image, category })
   },
 })
 

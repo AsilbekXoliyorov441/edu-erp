@@ -17,9 +17,13 @@ function GiftFormBody({ gift, onDone }) {
   const [price, setPrice] = useState(gift?.price ?? '')
   const [icon, setIcon] = useState(gift?.icon ?? ICON_OPTIONS[0])
   const [image, setImage] = useState(gift?.image ?? '')
+  const [category, setCategory] = useState(gift?.category ?? '')
 
+  const gifts = useGiftStore((s) => s.items)
   const createGift = useGiftStore((s) => s.create)
   const updateGift = useGiftStore((s) => s.update)
+
+  const categoryOptions = [...new Set(gifts.map((g) => g.category).filter(Boolean))].sort()
 
   const handleSubmit = (event) => {
     event.preventDefault()
@@ -30,12 +34,13 @@ function GiftFormBody({ gift, onDone }) {
       return
     }
     const trimmedImage = image.trim() || undefined
+    const trimmedCategory = category.trim() || undefined
 
     if (isEdit) {
-      updateGift(gift.id, { name: trimmed, price: numericPrice, icon, image: trimmedImage })
+      updateGift(gift.id, { name: trimmed, price: numericPrice, icon, image: trimmedImage, category: trimmedCategory })
       toast.success("Sovg'a yangilandi")
     } else {
-      createGift({ name: trimmed, price: numericPrice, icon, image: trimmedImage })
+      createGift({ name: trimmed, price: numericPrice, icon, image: trimmedImage, category: trimmedCategory })
       toast.success("Sovg'a qo'shildi")
     }
     onDone()
@@ -65,6 +70,21 @@ function GiftFormBody({ gift, onDone }) {
           <Input id="gift-price" type="number" min="1" value={price} onChange={(e) => setPrice(e.target.value)} required />
         </div>
         <div className="space-y-1.5">
+          <Label htmlFor="gift-category">Kategoriya (ixtiyoriy)</Label>
+          <Input
+            id="gift-category"
+            list="gift-category-options"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="Masalan: Aksessuarlar"
+          />
+          <datalist id="gift-category-options">
+            {categoryOptions.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </div>
+        <div className="space-y-1.5">
           <Label htmlFor="gift-image">Rasm URL (ixtiyoriy)</Label>
           <Input
             id="gift-image"
@@ -82,7 +102,7 @@ function GiftFormBody({ gift, onDone }) {
                 type="button"
                 onClick={() => setIcon(key)}
                 className={cn(
-                  'flex size-9 items-center justify-center rounded-xl border-2 text-muted-foreground transition-colors',
+                  'flex size-9 cursor-pointer items-center justify-center rounded-xl border-2 text-muted-foreground outline-none transition-colors',
                   icon === key ? 'border-primary bg-secondary text-primary' : 'border-border hover:border-primary/40',
                 )}
               >

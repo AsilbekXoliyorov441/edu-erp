@@ -70,6 +70,13 @@ export const insertStudent = internalMutation({
   },
 })
 
+export const updatePasswordHash = internalMutation({
+  args: { id: v.id('students'), passwordHash: v.string() },
+  handler: async (ctx, { id, passwordHash }) => {
+    await ctx.db.patch(id, { passwordHash })
+  },
+})
+
 export const updateStatus = mutation({
   args: { token: v.string(), id: v.id('students'), status: v.union(v.literal('active'), v.literal('removed')) },
   handler: async (ctx, { token, id, status }) => {

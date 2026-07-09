@@ -54,7 +54,11 @@ export default defineSchema({
 
   gifts: defineTable({
     name: v.string(),
-    icon: v.string(),
+    icon: v.optional(v.string()),
+    image: v.optional(v.string()),
+    description: v.optional(v.string()),
+    category: v.optional(v.string()),
+    link: v.optional(v.string()),
     price: v.number(),
   }),
 

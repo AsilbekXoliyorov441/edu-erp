@@ -16,6 +16,7 @@ function GiftFormBody({ gift, onDone }) {
   const [name, setName] = useState(gift?.name ?? '')
   const [price, setPrice] = useState(gift?.price ?? '')
   const [icon, setIcon] = useState(gift?.icon ?? ICON_OPTIONS[0])
+  const [image, setImage] = useState(gift?.image ?? '')
 
   const createGift = useGiftStore((s) => s.create)
   const updateGift = useGiftStore((s) => s.update)
@@ -28,12 +29,13 @@ function GiftFormBody({ gift, onDone }) {
       toast.error("Nom va narxni to'g'ri kiriting")
       return
     }
+    const trimmedImage = image.trim() || undefined
 
     if (isEdit) {
-      updateGift(gift.id, { name: trimmed, price: numericPrice, icon })
+      updateGift(gift.id, { name: trimmed, price: numericPrice, icon, image: trimmedImage })
       toast.success("Sovg'a yangilandi")
     } else {
-      createGift({ name: trimmed, price: numericPrice, icon })
+      createGift({ name: trimmed, price: numericPrice, icon, image: trimmedImage })
       toast.success("Sovg'a qo'shildi")
     }
     onDone()
@@ -63,7 +65,16 @@ function GiftFormBody({ gift, onDone }) {
           <Input id="gift-price" type="number" min="1" value={price} onChange={(e) => setPrice(e.target.value)} required />
         </div>
         <div className="space-y-1.5">
-          <Label>Belgi</Label>
+          <Label htmlFor="gift-image">Rasm URL (ixtiyoriy)</Label>
+          <Input
+            id="gift-image"
+            value={image}
+            onChange={(e) => setImage(e.target.value)}
+            placeholder="https://..."
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Belgi (rasm bo'lmasa ko'rsatiladi)</Label>
           <div className="grid grid-cols-8 gap-2">
             {ICON_OPTIONS.map((key) => (
               <button

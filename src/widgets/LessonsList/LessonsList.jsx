@@ -31,20 +31,24 @@ export function LessonsList({ lessons, coinEntries }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: Math.min(index * 0.02, 0.4) }}
-              className="flex flex-wrap items-center gap-3 py-3"
+              className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center"
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
-                <Calendar className="size-4" />
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+                  <Calendar className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {lesson.lessonNumber}-dars <span className="text-muted-foreground">• {getMonthLabel(lesson.monthIndex)}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">{formatUzDate(lesson.date, { withTime: true })}</p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">
-                  {lesson.lessonNumber}-dars <span className="text-muted-foreground">• {getMonthLabel(lesson.monthIndex)}</span>
-                </p>
-                <p className="text-xs text-muted-foreground">{formatUzDate(lesson.date, { withTime: true })}</p>
+              <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
+                <Badge variant="secondary">{studentCount} o'quvchi</Badge>
+                <Badge variant="coin">{total} coin</Badge>
+                <DeleteLessonDialog lesson={lesson} />
               </div>
-              <Badge variant="secondary">{studentCount} o'quvchi</Badge>
-              <Badge variant="coin">{total} coin</Badge>
-              <DeleteLessonDialog lesson={lesson} />
             </motion.div>
           )
         })}

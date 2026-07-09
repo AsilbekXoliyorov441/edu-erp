@@ -9,7 +9,7 @@ export function AppLayout() {
     <div className="min-h-screen bg-app-gradient bg-background text-foreground">
       <div className="flex">
         <Sidebar />
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <Header />
           <main className="flex-1 px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-8">
             <PageTransition>

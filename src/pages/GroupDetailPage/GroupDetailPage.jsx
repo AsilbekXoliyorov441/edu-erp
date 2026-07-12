@@ -10,6 +10,7 @@ import { StudentRosterTable } from '@/widgets/StudentRosterTable/StudentRosterTa
 import { LessonSessionPanel } from '@/widgets/LessonSessionPanel/LessonSessionPanel'
 import { LessonsList } from '@/widgets/LessonsList/LessonsList'
 import { AddStudentDialog } from '@/features/add-student/ui/AddStudentDialog'
+import { RenameGroupDialog } from '@/features/rename-group/ui/RenameGroupDialog'
 import { DeleteGroupDialog } from '@/features/remove-group/ui/DeleteGroupDialog'
 import { StartLessonDialog } from '@/features/give-coin/ui/StartLessonDialog'
 import { useGroupStore } from '@/entities/group/model/store'
@@ -67,7 +68,10 @@ export function GroupDetailPage() {
             </Link>
           </Button>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">{group.name}</h2>
+            <div className="flex items-center gap-1">
+              <h2 className="text-lg font-semibold text-foreground">{group.name}</h2>
+              <RenameGroupDialog group={group} />
+            </div>
             <div className="flex flex-wrap gap-2 pt-1">
               <Badge variant="secondary">{stats.studentCount} o'quvchi</Badge>
               <Badge variant="secondary">{stats.lessonCount} dars</Badge>

@@ -20,6 +20,14 @@ export const create = mutation({
   },
 })
 
+export const update = mutation({
+  args: { token: v.string(), id: v.id('groups'), name: v.string() },
+  handler: async (ctx, { token, id, name }) => {
+    await requireGroupOwner(ctx, token, id)
+    await ctx.db.patch(id, { name })
+  },
+})
+
 export const remove = mutation({
   args: { token: v.string(), id: v.id('groups') },
   handler: async (ctx, { token, id }) => {

@@ -46,4 +46,9 @@ export const ROUTES = {
   SETTINGS: '/sozlamalar',
   TEACHERS_DASHBOARD: '/teachers-dashboard',
   TEACHERS_MANAGEMENT: '/ustozlar',
+  LESSON_TESTS: '/darslar/:lessonId/testlar',
+  lessonTests: (id) => `/darslar/${id}/testlar`,
+  TESTS: '/testlar',
+  TAKE_TEST: '/testlar/:lessonId',
+  takeTest: (id) => `/testlar/${id}`,
 }

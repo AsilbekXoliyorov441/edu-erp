@@ -4,6 +4,7 @@ import { ROUTES } from '@/shared/config/constants'
 import { RequireAuth } from '@/app/router/RequireAuth'
 import { RequireTeacher } from '@/app/router/RequireTeacher'
 import { RequireSuperAdmin } from '@/app/router/RequireSuperAdmin'
+import { RequireStudent } from '@/app/router/RequireStudent'
 import { HomeRoute } from '@/app/router/HomeRoute'
 import { AppLayout } from '@/app/layout/AppLayout'
 import { LoginPage } from '@/pages/LoginPage/LoginPage'
@@ -15,6 +16,9 @@ import { LeaderboardPage } from '@/pages/LeaderboardPage/LeaderboardPage'
 import { SettingsPage } from '@/pages/SettingsPage/SettingsPage'
 import { TeachersDashboardPage } from '@/pages/TeachersDashboardPage/TeachersDashboardPage'
 import { TeachersManagementPage } from '@/pages/TeachersManagementPage/TeachersManagementPage'
+import { LessonTestsPage } from '@/pages/LessonTestsPage/LessonTestsPage'
+import { TestsPage } from '@/pages/TestsPage/TestsPage'
+import { TakeTestPage } from '@/pages/TakeTestPage/TakeTestPage'
 import { NotFoundPage } from '@/pages/NotFoundPage/NotFoundPage'
 
 export function AppRouter() {
@@ -73,6 +77,30 @@ export function AppRouter() {
               <RequireSuperAdmin>
                 <TeachersManagementPage />
               </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="darslar/:lessonId/testlar"
+            element={
+              <RequireTeacher>
+                <LessonTestsPage />
+              </RequireTeacher>
+            }
+          />
+          <Route
+            path="testlar"
+            element={
+              <RequireStudent>
+                <TestsPage />
+              </RequireStudent>
+            }
+          />
+          <Route
+            path="testlar/:lessonId"
+            element={
+              <RequireStudent>
+                <TakeTestPage />
+              </RequireStudent>
             }
           />
         </Route>

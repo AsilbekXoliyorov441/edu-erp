@@ -62,6 +62,28 @@ export async function requireLessonOwner(ctx, token, lessonId) {
   return requireGroupOwner(ctx, token, lesson.groupId)
 }
 
+/** Read access to a lesson's quiz content — broader than `requireLessonOwner` (which is
+ * write-only, teacher-only): a teacher gets the usual ownership rule, but a student is
+ * also let in as long as the lesson belongs to their OWN group (never a sibling group
+ * under the same teacher, even though the teacher's own scope spans all of them). */
+export async function requireLessonAccess(ctx, token, lessonId) {
+  const scope = await getScope(ctx, token)
+  const lesson = await ctx.db.get(lessonId)
+  if (!lesson) throw new ConvexError('Dars topilmadi')
+
+  if (scope.session.role === 'teacher') {
+    if (!scope.all) {
+      const group = await ctx.db.get(lesson.groupId)
+      if (!group || group.teacherId !== scope.teacherId) throw new ConvexError("Bu darsga ruxsatingiz yo'q")
+    }
+    return { scope, lesson }
+  }
+
+  const student = await ctx.db.get(scope.session.userId)
+  if (!student || student.groupId !== lesson.groupId) throw new ConvexError("Bu darsga ruxsatingiz yo'q")
+  return { scope, lesson }
+}
+
 export async function requireSuperAdmin(ctx, token) {
   const scope = await getScope(ctx, token)
   if (scope.session.role !== 'teacher' || !scope.all) {

@@ -70,4 +70,29 @@ export default defineSchema({
     userId: v.union(v.id('teachers'), v.id('students')),
     createdAt: v.number(),
   }).index('by_token', ['token']),
+
+  tests: defineTable({
+    lessonId: v.id('lessons'),
+    title: v.string(),
+    createdAt: v.string(),
+  }).index('by_lesson', ['lessonId']),
+
+  testQuestions: defineTable({
+    testId: v.id('tests'),
+    text: v.string(),
+    isCode: v.optional(v.boolean()),
+    options: v.array(v.string()),
+    correctIndex: v.number(),
+    order: v.number(),
+  }).index('by_test', ['testId']),
+
+  testAttempts: defineTable({
+    studentId: v.id('students'),
+    lessonId: v.id('lessons'),
+    score: v.number(),
+    totalQuestions: v.number(),
+    answeredAt: v.string(),
+  })
+    .index('by_student', ['studentId'])
+    .index('by_lesson', ['lessonId']),
 })

@@ -1,16 +1,18 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { CheckCircle2, Circle, Code2 } from 'lucide-react'
+import { CheckCircle2, Circle, Code2, ImagePlus, Loader2, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Textarea } from '@/shared/ui/textarea'
 import { Switch } from '@/shared/ui/switch'
+import { CodeBlock } from '@/shared/ui/code-block'
 import { cn } from '@/shared/lib/utils'
-import { useQuestionsForTest } from '@/entities/test-question/model/store'
+import { useQuestionsForTest, useUploadQuestionImage } from '@/entities/test-question/model/store'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 /** Mounted only while the dialog is open, so its field state always starts fresh from `question`. */
 function QuestionFormBody({ testId, question, onDone }) {
@@ -19,10 +21,38 @@ function QuestionFormBody({ testId, question, onDone }) {
   const [isCode, setIsCode] = useState(question?.isCode ?? false)
   const [options, setOptions] = useState(question?.options ?? ['', '', '', ''])
   const [correctIndex, setCorrectIndex] = useState(question?.correctIndex ?? 0)
+  const [imageStorageId, setImageStorageId] = useState(question?.imageStorageId ?? undefined)
+  const [imagePreview, setImagePreview] = useState(question?.imageUrl ?? null)
+  const [imageFile, setImageFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
   const { create, update } = useQuestionsForTest(testId)
+  const uploadImage = useUploadQuestionImage(testId)
 
   const setOption = (index, value) => {
     setOptions((prev) => prev.map((o, i) => (i === index ? value : o)))
+  }
+
+  const handlePickImage = (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error("Faqat rasm fayli yuklash mumkin")
+      return
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error("Rasm hajmi 5 MB dan oshmasligi kerak")
+      return
+    }
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    setImageStorageId(undefined)
   }
 
   const handleSubmit = async (event) => {
@@ -34,7 +64,20 @@ function QuestionFormBody({ testId, question, onDone }) {
       return
     }
 
-    const payload = { text: trimmedText, isCode, options: trimmedOptions, correctIndex }
+    let finalImageStorageId = imageStorageId
+    if (imageFile) {
+      setUploading(true)
+      try {
+        finalImageStorageId = await uploadImage(imageFile)
+      } catch {
+        toast.error("Rasmni yuklab bo'lmadi, qaytadan urinib ko'ring")
+        setUploading(false)
+        return
+      }
+      setUploading(false)
+    }
+
+    const payload = { text: trimmedText, isCode, imageStorageId: finalImageStorageId, options: trimmedOptions, correctIndex }
     if (isEdit) {
       await update(question.id, payload)
       toast.success('Savol yangilandi')
@@ -64,11 +107,34 @@ function QuestionFormBody({ testId, question, onDone }) {
           id="question-text"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={isCode ? 'Masalan: console.log(typeof [])' : "Savol matnini kiriting"}
+          placeholder={isCode ? 'Masalan: console.log(typeof [])' : 'Savol matnini kiriting'}
           className={cn('min-h-24', isCode && 'font-mono text-sm')}
           autoFocus
           required
         />
+        {isCode && text.trim() && <CodeBlock code={text} />}
+
+        <div className="space-y-2">
+          <Label>Rasm (ixtiyoriy)</Label>
+          {imagePreview ? (
+            <div className="relative w-fit">
+              <img src={imagePreview} alt="Savol rasmi" className="max-h-48 rounded-xl border border-border/60 object-contain" />
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
+                aria-label="Rasmni o'chirish"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ) : (
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
+              <ImagePlus className="size-3.5" /> Rasm biriktirish
+            </Button>
+          )}
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePickImage} />
+        </div>
 
         <div className="space-y-2">
           <Label>Javob variantlari — to'g'risini belgilang</Label>
@@ -98,7 +164,10 @@ function QuestionFormBody({ testId, question, onDone }) {
       </div>
 
       <DialogFooter>
-        <Button type="submit">{isEdit ? 'Saqlash' : "Qo'shish"}</Button>
+        <Button type="submit" disabled={uploading} className="gap-1.5">
+          {uploading && <Loader2 className="size-4 animate-spin" />}
+          {isEdit ? 'Saqlash' : "Qo'shish"}
+        </Button>
       </DialogFooter>
     </form>
   )

@@ -1,13 +1,10 @@
-import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Calendar, ListChecks } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { Badge } from '@/shared/ui/badge'
-import { Button } from '@/shared/ui/button'
 import { DeleteLessonDialog } from '@/features/manage-lessons/ui/DeleteLessonDialog'
 import { DeleteAllLessonsDialog } from '@/features/manage-lessons/ui/DeleteAllLessonsDialog'
 import { formatUzDate, getMonthLabel } from '@/shared/lib/date'
-import { ROUTES } from '@/shared/config/constants'
 
 export function LessonsList({ lessons, coinEntries }) {
   const sorted = [...lessons].sort((a, b) => b.lessonNumber - a.lessonNumber)
@@ -50,11 +47,6 @@ export function LessonsList({ lessons, coinEntries }) {
               <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
                 <Badge variant="secondary">{studentCount} o'quvchi</Badge>
                 <Badge variant="coin">{total} coin</Badge>
-                <Button asChild variant="ghost" size="icon" className="size-8 text-muted-foreground">
-                  <Link to={ROUTES.lessonTests(lesson.id)} aria-label="Testlar">
-                    <ListChecks className="size-4" />
-                  </Link>
-                </Button>
                 <DeleteLessonDialog lesson={lesson} />
               </div>
             </motion.div>

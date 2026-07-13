@@ -1,62 +1,66 @@
 import { query, mutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
 import { requireSession } from './lib/authz'
-import { requireLessonAccess, requireLessonOwner } from './lib/scoping'
+import { requireTestAccess, requireTestOwner } from './lib/scoping'
 
-async function getLessonQuestions(ctx, lessonId) {
-  const tests = await ctx.db
-    .query('tests')
-    .withIndex('by_lesson', (q) => q.eq('lessonId', lessonId))
+async function getTestQuestions(ctx, testId) {
+  const questions = await ctx.db
+    .query('testQuestions')
+    .withIndex('by_test', (q) => q.eq('testId', testId))
     .collect()
-  const testIdSet = new Set(tests.map((t) => t._id))
-  const allQuestions = await ctx.db.query('testQuestions').collect()
-  return allQuestions.filter((q) => testIdSet.has(q.testId)).sort((a, b) => a.order - b.order)
+  return questions.sort((a, b) => a.order - b.order)
 }
 
-/** The lesson's combined quiz, with every attached test's questions merged into one
- * list — `correctIndex` is never included in this response. */
-export const getQuizForLesson = query({
-  args: { token: v.string(), lessonId: v.id('lessons') },
-  handler: async (ctx, { token, lessonId }) => {
-    await requireLessonAccess(ctx, token, lessonId)
-    const questions = await getLessonQuestions(ctx, lessonId)
+/** One topic's quiz — `correctIndex` is never included in this response. */
+export const getQuizForTest = query({
+  args: { token: v.string(), testId: v.id('tests') },
+  handler: async (ctx, { token, testId }) => {
+    const { test } = await requireTestAccess(ctx, token, testId)
+    const questions = await getTestQuestions(ctx, testId)
     return {
-      lessonId,
+      testId,
+      title: test.title,
       totalQuestions: questions.length,
-      questions: questions.map((q) => ({ id: q._id, text: q.text, isCode: !!q.isCode, options: q.options })),
+      questions: await Promise.all(
+        questions.map(async (q) => ({
+          id: q._id,
+          text: q.text,
+          isCode: !!q.isCode,
+          imageUrl: q.imageStorageId ? await ctx.storage.getUrl(q.imageStorageId) : null,
+          options: q.options,
+        })),
+      ),
     }
   },
 })
 
 /** Reveals whether one answer is correct, right when the student picks it (for the
- * instant per-question animation) — scoped the same as `getQuizForLesson`. This only
+ * instant per-question animation) — scoped the same as `getQuizForTest`. This only
  * exposes the ONE question just answered, never the rest of the quiz's answer key. */
 export const checkAnswer = query({
   args: { token: v.string(), questionId: v.id('testQuestions'), selectedIndex: v.number() },
   handler: async (ctx, { token, questionId, selectedIndex }) => {
     const question = await ctx.db.get(questionId)
     if (!question) throw new ConvexError('Savol topilmadi')
-    const test = await ctx.db.get(question.testId)
-    if (!test) throw new ConvexError('Test topilmadi')
-    await requireLessonAccess(ctx, token, test.lessonId)
+    await requireTestAccess(ctx, token, question.testId)
     return { correct: selectedIndex === question.correctIndex, correctIndex: question.correctIndex }
   },
 })
 
 /** Scores the attempt server-side against the real stored answers — the client never
- * supplies (or is trusted for) a score. `totalQuestions` is the lesson's actual question
+ * supplies (or is trusted for) a score. `totalQuestions` is the topic's actual question
  * count, not `answers.length`, so skipping questions can't inflate the percentage. */
 export const submitAttempt = mutation({
   args: {
     token: v.string(),
-    lessonId: v.id('lessons'),
+    testId: v.id('tests'),
     answers: v.array(v.object({ questionId: v.id('testQuestions'), selectedIndex: v.number() })),
   },
-  handler: async (ctx, { token, lessonId, answers }) => {
-    const { scope } = await requireLessonAccess(ctx, token, lessonId)
+  handler: async (ctx, { token, testId, answers }) => {
+    const { scope } = await requireTestAccess(ctx, token, testId)
     if (scope.session.role !== 'student') throw new ConvexError("Faqat o'quvchi test topshira oladi")
 
-    const questions = await getLessonQuestions(ctx, lessonId)
+    const questions = await getTestQuestions(ctx, testId)
     const correctByQuestion = new Map(questions.map((q) => [q._id, q.correctIndex]))
 
     let score = 0
@@ -69,7 +73,7 @@ export const submitAttempt = mutation({
 
     await ctx.db.insert('testAttempts', {
       studentId: scope.session.userId,
-      lessonId,
+      testId,
       score,
       totalQuestions,
       answeredAt: new Date().toISOString(),
@@ -92,14 +96,14 @@ export const listMyAttempts = query({
   },
 })
 
-/** Teacher-only: every student attempt recorded for one lesson, for the "Natijalar" tab. */
-export const listAttemptsForLesson = query({
-  args: { token: v.string(), lessonId: v.id('lessons') },
-  handler: async (ctx, { token, lessonId }) => {
-    await requireLessonOwner(ctx, token, lessonId)
+/** Teacher-only: every student attempt recorded for one topic, for the "Natijalar" tab. */
+export const listAttemptsForTest = query({
+  args: { token: v.string(), testId: v.id('tests') },
+  handler: async (ctx, { token, testId }) => {
+    await requireTestOwner(ctx, token, testId)
     return await ctx.db
       .query('testAttempts')
-      .withIndex('by_lesson', (q) => q.eq('lessonId', lessonId))
+      .withIndex('by_test', (q) => q.eq('testId', testId))
       .collect()
   },
 })

@@ -1,51 +1,41 @@
 import { query, mutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { requireLessonOwner, getScopedGroupIdSet } from './lib/scoping'
+import { getScope, requireTestOwner } from './lib/scoping'
 
-async function requireTestOwner(ctx, token, testId) {
-  const test = await ctx.db.get(testId)
-  if (!test) throw new ConvexError('Test topilmadi')
-  await requireLessonOwner(ctx, token, test.lessonId)
-  return test
+function requireTeacherScope(scope) {
+  if (scope.session.role !== 'teacher') throw new ConvexError("O'qituvchi huquqi talab qilinadi")
 }
 
+/** Every topic ("mavzu") the caller owns, with its question count and how many groups it's
+ * currently attached to — the "Testlar" management list. */
 export const listForTeacher = query({
-  args: { token: v.string(), lessonId: v.id('lessons') },
-  handler: async (ctx, { token, lessonId }) => {
-    await requireLessonOwner(ctx, token, lessonId)
-    const tests = await ctx.db
-      .query('tests')
-      .withIndex('by_lesson', (q) => q.eq('lessonId', lessonId))
-      .collect()
-    const questions = await ctx.db.query('testQuestions').collect()
-    return tests.map((t) => ({
-      ...t,
-      questionCount: questions.filter((q) => q.testId === t._id).length,
-    }))
-  },
-})
-
-/** Every lessonId (within the caller's scope) that has at least one test attached —
- * used by the student "Testlar" list to filter down an already-fetched lessons list. */
-export const listLessonIdsWithTests = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const groupIdSet = await getScopedGroupIdSet(ctx, token)
-    const lessons = await ctx.db.query('lessons').collect()
-    const scopedLessons = groupIdSet === null ? lessons : lessons.filter((l) => groupIdSet.has(l.groupId))
-    const scopedLessonIdSet = new Set(scopedLessons.map((l) => l._id))
+    const scope = await getScope(ctx, token)
+    requireTeacherScope(scope)
 
-    const tests = await ctx.db.query('tests').collect()
-    const lessonIdsWithTests = new Set(tests.filter((t) => scopedLessonIdSet.has(t.lessonId)).map((t) => t.lessonId))
-    return [...lessonIdsWithTests]
+    const allTests = await ctx.db.query('tests').collect()
+    const tests = scope.all ? allTests : allTests.filter((t) => t.teacherId === scope.teacherId)
+
+    const questions = await ctx.db.query('testQuestions').collect()
+    const assignments = await ctx.db.query('testAssignments').collect()
+
+    return tests
+      .map((t) => ({
+        ...t,
+        questionCount: questions.filter((q) => q.testId === t._id).length,
+        groupCount: assignments.filter((a) => a.testId === t._id).length,
+      }))
+      .sort((a, b) => b._creationTime - a._creationTime)
   },
 })
 
 export const create = mutation({
-  args: { token: v.string(), lessonId: v.id('lessons'), title: v.string() },
-  handler: async (ctx, { token, lessonId, title }) => {
-    await requireLessonOwner(ctx, token, lessonId)
-    return await ctx.db.insert('tests', { lessonId, title, createdAt: new Date().toISOString() })
+  args: { token: v.string(), title: v.string() },
+  handler: async (ctx, { token, title }) => {
+    const scope = await getScope(ctx, token)
+    requireTeacherScope(scope)
+    return await ctx.db.insert('tests', { title, createdAt: new Date().toISOString(), teacherId: scope.session.userId })
   },
 })
 
@@ -57,15 +47,34 @@ export const update = mutation({
   },
 })
 
+/** Deletes the topic together with its questions (and any uploaded question images),
+ * group assignments, and recorded attempts. */
 export const remove = mutation({
   args: { token: v.string(), id: v.id('tests') },
   handler: async (ctx, { token, id }) => {
     await requireTestOwner(ctx, token, id)
+
     const questions = await ctx.db
       .query('testQuestions')
       .withIndex('by_test', (q) => q.eq('testId', id))
       .collect()
-    for (const question of questions) await ctx.db.delete(question._id)
+    for (const question of questions) {
+      if (question.imageStorageId) await ctx.storage.delete(question.imageStorageId)
+      await ctx.db.delete(question._id)
+    }
+
+    const assignments = await ctx.db
+      .query('testAssignments')
+      .withIndex('by_test', (q) => q.eq('testId', id))
+      .collect()
+    for (const assignment of assignments) await ctx.db.delete(assignment._id)
+
+    const attempts = await ctx.db
+      .query('testAttempts')
+      .withIndex('by_test', (q) => q.eq('testId', id))
+      .collect()
+    for (const attempt of attempts) await ctx.db.delete(attempt._id)
+
     await ctx.db.delete(id)
   },
 })

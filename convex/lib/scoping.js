@@ -91,3 +91,38 @@ export async function requireSuperAdmin(ctx, token) {
   }
   return scope.session
 }
+
+/** Ownership check for a test (quiz topic) — write access, teacher-only, scoped like
+ * `requireGroupOwner`. Tests are owned directly by the teacher who created them (not via a
+ * lesson/group), since one topic can be attached to several groups at once. */
+export async function requireTestOwner(ctx, token, testId) {
+  const test = await ctx.db.get(testId)
+  if (!test) throw new ConvexError('Mavzu topilmadi')
+  const scope = await getScope(ctx, token)
+  if (scope.session.role !== 'teacher') throw new ConvexError("O'qituvchi huquqi talab qilinadi")
+  if (!scope.all && test.teacherId !== scope.teacherId) throw new ConvexError("Bu mavzuga ruxsatingiz yo'q")
+  return { scope, test }
+}
+
+/** Read access to a test's quiz content: the owning teacher, or a student whose own group
+ * has the test attached via `testAssignments`. */
+export async function requireTestAccess(ctx, token, testId) {
+  const test = await ctx.db.get(testId)
+  if (!test) throw new ConvexError('Mavzu topilmadi')
+  const scope = await getScope(ctx, token)
+
+  if (scope.session.role === 'teacher') {
+    if (!scope.all && test.teacherId !== scope.teacherId) throw new ConvexError("Bu mavzuga ruxsatingiz yo'q")
+    return { scope, test }
+  }
+
+  const student = await ctx.db.get(scope.session.userId)
+  if (!student) throw new ConvexError("O'quvchi topilmadi")
+  const assignment = await ctx.db
+    .query('testAssignments')
+    .withIndex('by_test', (q) => q.eq('testId', testId))
+    .filter((q) => q.eq(q.field('groupId'), student.groupId))
+    .first()
+  if (!assignment) throw new ConvexError("Bu testga ruxsatingiz yo'q")
+  return { scope, test }
+}

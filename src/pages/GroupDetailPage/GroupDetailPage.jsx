@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Users2 } from 'lucide-react'
+import { ArrowLeft, ListChecks, Users2 } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
@@ -18,9 +18,49 @@ import { useStudentStore } from '@/entities/student/model/store'
 import { useLessonStore } from '@/entities/lesson/model/store'
 import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
 import { useTransactionStore } from '@/entities/transaction/model/store'
+import { useTestsForGroup } from '@/entities/test-assignment/model/store'
 import { getGroupStats } from '@/shared/lib/stats'
 import { getMonthFromLessonNumber } from '@/shared/lib/date'
 import { ROUTES, STUDENT_STATUS } from '@/shared/config/constants'
+
+function GroupTestsTab({ groupId }) {
+  const tests = useTestsForGroup(groupId)
+
+  if (tests.length === 0) {
+    return (
+      <EmptyState
+        icon={ListChecks}
+        title="Ulangan mavzu yo'q"
+        description="Testlar bo'limida mavzu yaratib, uni shu guruhga ulashingiz mumkin."
+        action={
+          <Button asChild variant="outline">
+            <Link to={ROUTES.TESTS}>Testlar bo'limiga o'tish</Link>
+          </Button>
+        }
+      />
+    )
+  }
+
+  return (
+    <div className="divide-y divide-border/50 rounded-xl border border-border/60">
+      {tests.map((test) => (
+        <Link
+          key={test.id}
+          to={ROUTES.testDetail(test.id)}
+          className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-accent"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+              <ListChecks className="size-4" />
+            </div>
+            <span className="text-sm font-medium text-foreground">{test.title}</span>
+          </div>
+          <Badge variant="secondary">{test.questionCount} savol</Badge>
+        </Link>
+      ))}
+    </div>
+  )
+}
 
 export function GroupDetailPage() {
   const { groupId } = useParams()
@@ -115,6 +155,7 @@ export function GroupDetailPage() {
           <TabsList>
             <TabsTrigger value="students">O'quvchilar</TabsTrigger>
             <TabsTrigger value="lessons">Darslar</TabsTrigger>
+            <TabsTrigger value="tests">Testlar</TabsTrigger>
           </TabsList>
           <TabsContent value="students">
             <Card>
@@ -129,6 +170,9 @@ export function GroupDetailPage() {
                 <LessonsList lessons={groupLessons} coinEntries={coinEntries} />
               </CardContent>
             </Card>
+          </TabsContent>
+          <TabsContent value="tests">
+            <GroupTestsTab groupId={group.id} />
           </TabsContent>
         </Tabs>
       )}

@@ -16,8 +16,8 @@ import { LeaderboardPage } from '@/pages/LeaderboardPage/LeaderboardPage'
 import { SettingsPage } from '@/pages/SettingsPage/SettingsPage'
 import { TeachersDashboardPage } from '@/pages/TeachersDashboardPage/TeachersDashboardPage'
 import { TeachersManagementPage } from '@/pages/TeachersManagementPage/TeachersManagementPage'
-import { LessonTestsPage } from '@/pages/LessonTestsPage/LessonTestsPage'
 import { TestsPage } from '@/pages/TestsPage/TestsPage'
+import { TestDetailPage } from '@/pages/TestDetailPage/TestDetailPage'
 import { TakeTestPage } from '@/pages/TakeTestPage/TakeTestPage'
 import { NotFoundPage } from '@/pages/NotFoundPage/NotFoundPage'
 
@@ -79,24 +79,17 @@ export function AppRouter() {
               </RequireSuperAdmin>
             }
           />
+          <Route path="testlar" element={<TestsPage />} />
           <Route
-            path="darslar/:lessonId/testlar"
+            path="testlar/:testId"
             element={
               <RequireTeacher>
-                <LessonTestsPage />
+                <TestDetailPage />
               </RequireTeacher>
             }
           />
           <Route
-            path="testlar"
-            element={
-              <RequireStudent>
-                <TestsPage />
-              </RequireStudent>
-            }
-          />
-          <Route
-            path="testlar/:lessonId"
+            path="testlar/:testId/yechish"
             element={
               <RequireStudent>
                 <TakeTestPage />

@@ -1,36 +1,44 @@
 import { query, mutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { requireLessonOwner } from './lib/scoping'
+import { requireTestOwner } from './lib/scoping'
 
 function validateOptions(options, correctIndex) {
   if (options.length !== 4) throw new ConvexError("Aynan 4 ta javob varianti bo'lishi kerak")
   if (correctIndex < 0 || correctIndex > 3) throw new ConvexError("To'g'ri javob 1-4 orasida tanlanishi kerak")
 }
 
-async function requireTestOwnerByTestId(ctx, token, testId) {
-  const test = await ctx.db.get(testId)
-  if (!test) throw new ConvexError('Test topilmadi')
-  await requireLessonOwner(ctx, token, test.lessonId)
-  return test
-}
-
 async function requireQuestionOwner(ctx, token, questionId) {
   const question = await ctx.db.get(questionId)
   if (!question) throw new ConvexError('Savol topilmadi')
-  await requireTestOwnerByTestId(ctx, token, question.testId)
-  return question
+  const { scope } = await requireTestOwner(ctx, token, question.testId)
+  return { question, scope }
 }
 
-/** Full question data, including `correctIndex` — teacher-side editing view only. */
+/** A short-lived URL the client uploads a question's image to directly — the caller must
+ * already own the test the image will belong to. */
+export const generateUploadUrl = mutation({
+  args: { token: v.string(), testId: v.id('tests') },
+  handler: async (ctx, { token, testId }) => {
+    await requireTestOwner(ctx, token, testId)
+    return await ctx.storage.generateUploadUrl()
+  },
+})
+
+/** Full question data, including `correctIndex` and a resolved image URL — teacher-side
+ * editing view only. */
 export const listForTeacher = query({
   args: { token: v.string(), testId: v.id('tests') },
   handler: async (ctx, { token, testId }) => {
-    await requireTestOwnerByTestId(ctx, token, testId)
+    await requireTestOwner(ctx, token, testId)
     const questions = await ctx.db
       .query('testQuestions')
       .withIndex('by_test', (q) => q.eq('testId', testId))
       .collect()
-    return questions.sort((a, b) => a.order - b.order)
+    return await Promise.all(
+      questions
+        .sort((a, b) => a.order - b.order)
+        .map(async (q) => ({ ...q, imageUrl: q.imageStorageId ? await ctx.storage.getUrl(q.imageStorageId) : null })),
+    )
   },
 })
 
@@ -40,11 +48,12 @@ export const create = mutation({
     testId: v.id('tests'),
     text: v.string(),
     isCode: v.optional(v.boolean()),
+    imageStorageId: v.optional(v.id('_storage')),
     options: v.array(v.string()),
     correctIndex: v.number(),
   },
-  handler: async (ctx, { token, testId, text, isCode, options, correctIndex }) => {
-    await requireTestOwnerByTestId(ctx, token, testId)
+  handler: async (ctx, { token, testId, text, isCode, imageStorageId, options, correctIndex }) => {
+    await requireTestOwner(ctx, token, testId)
     validateOptions(options, correctIndex)
 
     const existing = await ctx.db
@@ -53,7 +62,7 @@ export const create = mutation({
       .collect()
     const order = existing.length ? Math.max(...existing.map((q) => q.order)) + 1 : 1
 
-    return await ctx.db.insert('testQuestions', { testId, text, isCode, options, correctIndex, order })
+    return await ctx.db.insert('testQuestions', { testId, text, isCode, imageStorageId, options, correctIndex, order })
   },
 })
 
@@ -63,20 +72,25 @@ export const update = mutation({
     id: v.id('testQuestions'),
     text: v.string(),
     isCode: v.optional(v.boolean()),
+    imageStorageId: v.optional(v.id('_storage')),
     options: v.array(v.string()),
     correctIndex: v.number(),
   },
-  handler: async (ctx, { token, id, text, isCode, options, correctIndex }) => {
-    await requireQuestionOwner(ctx, token, id)
+  handler: async (ctx, { token, id, text, isCode, imageStorageId, options, correctIndex }) => {
+    const { question } = await requireQuestionOwner(ctx, token, id)
     validateOptions(options, correctIndex)
-    await ctx.db.patch(id, { text, isCode, options, correctIndex })
+    if (question.imageStorageId && question.imageStorageId !== imageStorageId) {
+      await ctx.storage.delete(question.imageStorageId)
+    }
+    await ctx.db.patch(id, { text, isCode, imageStorageId, options, correctIndex })
   },
 })
 
 export const remove = mutation({
   args: { token: v.string(), id: v.id('testQuestions') },
   handler: async (ctx, { token, id }) => {
-    await requireQuestionOwner(ctx, token, id)
+    const { question } = await requireQuestionOwner(ctx, token, id)
+    if (question.imageStorageId) await ctx.storage.delete(question.imageStorageId)
     await ctx.db.delete(id)
   },
 })

@@ -8,8 +8,9 @@ import { Badge } from '@/shared/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/shared/ui/dialog'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { Meter } from '@/shared/ui/meter'
+import { CodeBlock } from '@/shared/ui/code-block'
 import { cn } from '@/shared/lib/utils'
-import { useQuizForLesson, useCheckAnswer, useSubmitAttempt } from '@/entities/quiz/model/store'
+import { useQuizForTest, useCheckAnswer, useSubmitAttempt } from '@/entities/quiz/model/store'
 import { ROUTES } from '@/shared/config/constants'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
@@ -31,9 +32,9 @@ function scoreBadgeVariant(percent) {
 }
 
 export function TakeTestPage() {
-  const { lessonId } = useParams()
+  const { testId } = useParams()
   const navigate = useNavigate()
-  const quiz = useQuizForLesson(lessonId)
+  const quiz = useQuizForTest(testId)
   const checkAnswer = useCheckAnswer()
   const submitAttempt = useSubmitAttempt()
 
@@ -48,7 +49,7 @@ export function TakeTestPage() {
   // every render — `quiz` itself is a fresh object per Convex refresh, so memoizing on
   // it directly would reshuffle mid-quiz.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const questions = useMemo(() => (quiz ? shuffle(quiz.questions) : null), [quiz?.lessonId, shuffleSeed])
+  const questions = useMemo(() => (quiz ? shuffle(quiz.questions) : null), [quiz?.testId, shuffleSeed])
 
   const restart = () => {
     setShuffleSeed((seed) => seed + 1)
@@ -62,7 +63,7 @@ export function TakeTestPage() {
 
   if (questions.length === 0) {
     return (
-      <EmptyState icon={ListChecks} title="Savollar yo'q" description="Bu darsda hali savol qo'shilmagan." />
+      <EmptyState icon={ListChecks} title="Savollar yo'q" description="Bu mavzuga hali savol qo'shilmagan." />
     )
   }
 
@@ -79,7 +80,7 @@ export function TakeTestPage() {
 
     setTimeout(async () => {
       if (isLast) {
-        const finalResult = await submitAttempt(lessonId, nextAnswers)
+        const finalResult = await submitAttempt(testId, nextAnswers)
         setResult(finalResult)
       } else {
         setCurrentIndex((i) => i + 1)
@@ -104,11 +105,16 @@ export function TakeTestPage() {
           <Card className="relative overflow-hidden">
             <CardContent className="space-y-4 p-6">
               {currentQuestion.isCode ? (
-                <pre className="overflow-x-auto rounded-xl bg-foreground/90 px-4 py-3 text-sm text-background">
-                  <code>{currentQuestion.text}</code>
-                </pre>
+                <CodeBlock code={currentQuestion.text} />
               ) : (
                 <p className="text-lg font-semibold text-foreground">{currentQuestion.text}</p>
+              )}
+              {currentQuestion.imageUrl && (
+                <img
+                  src={currentQuestion.imageUrl}
+                  alt="Savol rasmi"
+                  className="max-h-64 w-full rounded-xl border border-border/60 object-contain"
+                />
               )}
 
               <div className="space-y-2">

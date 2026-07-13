@@ -71,28 +71,42 @@ export default defineSchema({
     createdAt: v.number(),
   }).index('by_token', ['token']),
 
+  /** A reusable quiz topic ("mavzu") — created once by a teacher and attached to any number
+   * of groups via `testAssignments`, so the same 10-20 questions don't need to be recreated
+   * per group. */
   tests: defineTable({
-    lessonId: v.id('lessons'),
     title: v.string(),
     createdAt: v.string(),
-  }).index('by_lesson', ['lessonId']),
+    teacherId: v.id('teachers'),
+  }).index('by_teacher', ['teacherId']),
 
   testQuestions: defineTable({
     testId: v.id('tests'),
     text: v.string(),
     isCode: v.optional(v.boolean()),
+    imageStorageId: v.optional(v.id('_storage')),
     options: v.array(v.string()),
     correctIndex: v.number(),
     order: v.number(),
   }).index('by_test', ['testId']),
 
+  /** Links a reusable test (topic) to a group whose students may take it — many-to-many,
+   * so the same topic can be attached to several groups without duplicating questions. */
+  testAssignments: defineTable({
+    testId: v.id('tests'),
+    groupId: v.id('groups'),
+    createdAt: v.string(),
+  })
+    .index('by_test', ['testId'])
+    .index('by_group', ['groupId']),
+
   testAttempts: defineTable({
     studentId: v.id('students'),
-    lessonId: v.id('lessons'),
+    testId: v.id('tests'),
     score: v.number(),
     totalQuestions: v.number(),
     answeredAt: v.string(),
   })
     .index('by_student', ['studentId'])
-    .index('by_lesson', ['lessonId']),
+    .index('by_test', ['testId']),
 })

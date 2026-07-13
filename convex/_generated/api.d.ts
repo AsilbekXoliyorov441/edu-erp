@@ -24,6 +24,7 @@ import type * as students from "../students.js";
 import type * as studentsActions from "../studentsActions.js";
 import type * as teachers from "../teachers.js";
 import type * as teachersActions from "../teachersActions.js";
+import type * as testAssignments from "../testAssignments.js";
 import type * as testQuestions from "../testQuestions.js";
 import type * as tests from "../tests.js";
 import type * as transactions from "../transactions.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   studentsActions: typeof studentsActions;
   teachers: typeof teachers;
   teachersActions: typeof teachersActions;
+  testAssignments: typeof testAssignments;
   testQuestions: typeof testQuestions;
   tests: typeof tests;
   transactions: typeof transactions;

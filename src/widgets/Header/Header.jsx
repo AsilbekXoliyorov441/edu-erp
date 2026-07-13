@@ -21,11 +21,14 @@ const PAGE_TITLES = {
   [ROUTES.COIN_MARKET]: 'Coin Market',
   [ROUTES.LEADERBOARD]: 'Reyting',
   [ROUTES.SETTINGS]: 'Sozlamalar',
+  [ROUTES.TESTS]: 'Testlar',
 }
 
 function resolveTitle(pathname) {
   if (pathname.startsWith('/guruhlar/')) return 'Guruh'
   if (pathname.startsWith('/oquvchi/')) return "O'quvchi profili"
+  if (pathname.endsWith('/yechish')) return 'Test topshirish'
+  if (pathname.startsWith('/testlar/')) return 'Mavzu'
   return PAGE_TITLES[pathname] ?? 'Coin System'
 }
 

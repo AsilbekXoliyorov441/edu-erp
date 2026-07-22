@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { Switch } from '@/shared/ui/switch'
 import { Label } from '@/shared/ui/label'
 import { TeacherProfileForm } from '@/features/update-teacher-profile/ui/TeacherProfileForm'
+import { CoinPriceForm } from '@/features/manage-coin-price/ui/CoinPriceForm'
 import { ExportDataButton } from '@/features/export-reset-data/ui/ExportDataButton'
 import { ImportDataButton } from '@/features/export-reset-data/ui/ImportDataButton'
 import { ResetDataDialog } from '@/features/export-reset-data/ui/ResetDataDialog'
@@ -14,6 +15,8 @@ export function SettingsPage() {
   const setTheme = useThemeStore((s) => s.setTheme)
   const username = useAuthStore((s) => s.username)
   const fullName = useAuthStore((s) => s.fullName)
+  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin)
+  const centerName = useAuthStore((s) => s.centerName)
   const teacher = username ? { username, fullName } : null
 
   return (
@@ -44,6 +47,18 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent className="pt-0">
             <TeacherProfileForm teacher={teacher} />
+          </CardContent>
+        </Card>
+      )}
+
+      {isSuperAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Coin narxi{centerName ? ` — ${centerName}` : ''}</CardTitle>
+            <CardDescription>1 coin necha so'mga teng — moliyaviy statistikada shu qiymat ishlatiladi</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <CoinPriceForm />
           </CardContent>
         </Card>
       )}

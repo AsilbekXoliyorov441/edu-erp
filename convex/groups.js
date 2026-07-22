@@ -7,7 +7,7 @@ export const list = query({
   handler: async (ctx, { token }) => {
     const groupIdSet = await getScopedGroupIdSet(ctx, token)
     const groups = await ctx.db.query('groups').collect()
-    return groupIdSet === null ? groups : groups.filter((g) => groupIdSet.has(g._id))
+    return groups.filter((g) => groupIdSet.has(g._id))
   },
 })
 
@@ -15,7 +15,7 @@ export const create = mutation({
   args: { token: v.string(), name: v.string() },
   handler: async (ctx, { token, name }) => {
     const scope = await getScope(ctx, token)
-    if (scope.session.role !== 'teacher') throw new ConvexError("O'qituvchi huquqi talab qilinadi")
+    if (scope.platformAdmin || scope.session.role !== 'teacher') throw new ConvexError("O'qituvchi huquqi talab qilinadi")
     return await ctx.db.insert('groups', { name, createdAt: new Date().toISOString(), teacherId: scope.session.userId })
   },
 })

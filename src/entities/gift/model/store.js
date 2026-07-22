@@ -13,7 +13,7 @@ import { mapId } from '@/shared/lib/convex/mapId'
 
 export function useGiftStore(selector) {
   const token = useAuthStore((s) => s.token)
-  const items = (useQuery(api.gifts.list) ?? []).map(mapId)
+  const items = (useQuery(api.gifts.list, token ? { token } : 'skip') ?? []).map(mapId)
   const createMutation = useMutation(api.gifts.create)
   const updateMutation = useMutation(api.gifts.update)
   const removeMutation = useMutation(api.gifts.remove)

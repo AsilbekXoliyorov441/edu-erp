@@ -24,11 +24,17 @@ export const exportAll = query({
     const session = await requireTeacher(ctx, token)
     const teacher = await ctx.db.get(session.userId)
     const owned = await collectForTeacher(ctx, session.userId)
+    const gifts = teacher?.centerId
+      ? await ctx.db
+          .query('gifts')
+          .withIndex('by_center', (q) => q.eq('centerId', teacher.centerId))
+          .collect()
+      : []
     return {
       exportedAt: new Date().toISOString(),
       teacher: teacher ? { username: teacher.username, passwordHash: teacher.passwordHash, fullName: teacher.fullName } : null,
       ...owned,
-      gifts: await ctx.db.query('gifts').collect(),
+      gifts,
     }
   },
 })

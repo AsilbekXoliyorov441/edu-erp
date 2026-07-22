@@ -21,13 +21,23 @@ function writeToken(token) {
   }
 }
 
-export const useAuthStore = create((set, get) => ({
+const LOGGED_OUT_FIELDS = {
   token: null,
   role: null,
+  tenantRole: null,
   userId: null,
   fullName: null,
   username: null,
   isSuperAdmin: false,
+  isDirector: false,
+  centerId: null,
+  centerName: null,
+  centerActive: true,
+  coinPriceSom: null,
+}
+
+export const useAuthStore = create((set, get) => ({
+  ...LOGGED_OUT_FIELDS,
   hydrated: false,
 
   async hydrate() {
@@ -45,10 +55,16 @@ export const useAuthStore = create((set, get) => ({
     set({
       token,
       role: who.role,
+      tenantRole: who.tenantRole ?? null,
       userId: who.userId,
       fullName: who.fullName,
       username: who.username ?? null,
       isSuperAdmin: !!who.isSuperAdmin,
+      isDirector: !!who.isDirector,
+      centerId: who.centerId ?? null,
+      centerName: who.centerName ?? null,
+      centerActive: who.centerActive ?? true,
+      coinPriceSom: who.coinPriceSom ?? null,
       hydrated: true,
     })
   },
@@ -60,10 +76,16 @@ export const useAuthStore = create((set, get) => ({
     set({
       token: result.token,
       role: result.role,
+      tenantRole: result.tenantRole ?? null,
       userId: result.userId,
       fullName: result.fullName,
       username: result.username,
       isSuperAdmin: !!result.isSuperAdmin,
+      isDirector: !!result.isDirector,
+      centerId: result.centerId ?? null,
+      centerName: result.centerName ?? null,
+      centerActive: true,
+      coinPriceSom: result.coinPriceSom ?? null,
     })
     return { ok: true }
   },
@@ -79,7 +101,7 @@ export const useAuthStore = create((set, get) => ({
   logout() {
     const token = get().token
     writeToken(null)
-    set({ token: null, role: null, userId: null, fullName: null, username: null, isSuperAdmin: false })
+    set({ ...LOGGED_OUT_FIELDS })
     if (token) convexClient.mutation(api.auth.logout, { token }).catch(() => {})
   },
 
@@ -88,5 +110,12 @@ export const useAuthStore = create((set, get) => ({
     if (!token) return
     await convexClient.mutation(api.auth.updateTeacherProfile, { token, fullName: patch.fullName })
     set({ fullName: patch.fullName })
+  },
+
+  async updateCoinPrice(coinPriceSom) {
+    const token = get().token
+    if (!token) return
+    await convexClient.mutation(api.centers.updateCoinPrice, { token, coinPriceSom })
+    set({ coinPriceSom })
   },
 }))

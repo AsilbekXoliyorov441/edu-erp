@@ -1,9 +1,9 @@
 import { query, mutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { getScope, requireTestOwner } from './lib/scoping'
+import { getScope, requireTestOwner, getCenterTeacherIdSet } from './lib/scoping'
 
 function requireTeacherScope(scope) {
-  if (scope.session.role !== 'teacher') throw new ConvexError("O'qituvchi huquqi talab qilinadi")
+  if (scope.platformAdmin || scope.session.role !== 'teacher') throw new ConvexError("O'qituvchi huquqi talab qilinadi")
 }
 
 /** Every topic ("mavzu") the caller owns, with its question count and how many groups it's
@@ -15,7 +15,13 @@ export const listForTeacher = query({
     requireTeacherScope(scope)
 
     const allTests = await ctx.db.query('tests').collect()
-    const tests = scope.all ? allTests : allTests.filter((t) => t.teacherId === scope.teacherId)
+    let tests
+    if (scope.all) {
+      const teacherIds = await getCenterTeacherIdSet(ctx, scope.centerId)
+      tests = allTests.filter((t) => teacherIds.has(t.teacherId))
+    } else {
+      tests = allTests.filter((t) => t.teacherId === scope.teacherId)
+    }
 
     const questions = await ctx.db.query('testQuestions').collect()
     const assignments = await ctx.db.query('testAssignments').collect()

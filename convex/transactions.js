@@ -7,7 +7,7 @@ export const list = query({
   handler: async (ctx, { token }) => {
     const studentIdSet = await getScopedStudentIdSet(ctx, token)
     const transactions = await ctx.db.query('transactions').collect()
-    return studentIdSet === null ? transactions : transactions.filter((t) => studentIdSet.has(t.studentId))
+    return transactions.filter((t) => studentIdSet.has(t.studentId))
   },
 })
 
@@ -20,6 +20,11 @@ export const redeemGift = mutation({
 
     const gift = await ctx.db.get(giftId)
     if (!gift) throw new ConvexError("Sovg'a topilmadi")
+
+    const student = await ctx.db.get(studentId)
+    const group = student ? await ctx.db.get(student.groupId) : null
+    const owner = group?.teacherId ? await ctx.db.get(group.teacherId) : null
+    if (!owner || owner.centerId !== gift.centerId) throw new ConvexError("Bu sovg'a boshqa markazga tegishli")
 
     const studentTransactions = await ctx.db
       .query('transactions')

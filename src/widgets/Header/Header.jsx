@@ -13,15 +13,22 @@ import {
 } from '@/shared/ui/dropdown-menu'
 import { useThemeStore } from '@/shared/lib/store/themeStore'
 import { useAuthStore } from '@/entities/session/model/store'
-import { ROLES, ROUTES } from '@/shared/config/constants'
+import { ROLES, ROUTES, TENANT_ROLES } from '@/shared/config/constants'
 
 const PAGE_TITLES = {
   [ROUTES.DASHBOARD]: 'Bosh sahifa',
+  [ROUTES.PLATFORM_ADMIN]: 'Markazlar',
   [ROUTES.GROUPS]: 'Guruhlar',
   [ROUTES.COIN_MARKET]: 'Coin Market',
   [ROUTES.LEADERBOARD]: 'Reyting',
   [ROUTES.SETTINGS]: 'Sozlamalar',
   [ROUTES.TESTS]: 'Testlar',
+}
+
+const TENANT_ROLE_LABELS = {
+  [TENANT_ROLES.DIRECTOR]: 'Direktor',
+  [TENANT_ROLES.EDU_ADMIN]: 'EduSuperAdmin',
+  [TENANT_ROLES.TEACHER]: "O'qituvchi",
 }
 
 function resolveTitle(pathname) {
@@ -38,8 +45,17 @@ export function Header() {
   const theme = useThemeStore((s) => s.theme)
   const toggleTheme = useThemeStore((s) => s.toggleTheme)
   const role = useAuthStore((s) => s.role)
+  const tenantRole = useAuthStore((s) => s.tenantRole)
   const fullName = useAuthStore((s) => s.fullName)
   const logout = useAuthStore((s) => s.logout)
+  const centerName = useAuthStore((s) => s.centerName)
+
+  const roleLabel =
+    role === ROLES.PLATFORM_ADMIN
+      ? 'Platforma SuperAdmin'
+      : role === ROLES.STUDENT
+        ? "O'quvchi"
+        : (TENANT_ROLE_LABELS[tenantRole] ?? "O'qituvchi")
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border/60 bg-background/70 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
@@ -82,9 +98,10 @@ export function Header() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel className="flex flex-col gap-1.5">
               <span className="text-foreground">{fullName}</span>
-              <Badge variant={role === ROLES.TEACHER ? 'default' : 'secondary'} className="w-fit">
-                {role === ROLES.TEACHER ? "O'qituvchi" : "O'quvchi"}
+              <Badge variant={role === ROLES.STUDENT ? 'secondary' : 'default'} className="w-fit">
+                {roleLabel}
               </Badge>
+              {centerName && <span className="text-xs font-normal text-muted-foreground">{centerName}</span>}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem

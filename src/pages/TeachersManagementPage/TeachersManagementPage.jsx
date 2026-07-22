@@ -1,17 +1,21 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { ShieldCheck, Users2 } from 'lucide-react'
+import { ShieldCheck, Crown, Users2 } from 'lucide-react'
 import { Badge } from '@/shared/ui/badge'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { Switch } from '@/shared/ui/switch'
 import { CreateTeacherDialog } from '@/features/manage-teachers/ui/CreateTeacherDialog'
+import { CreateEduAdminDialog } from '@/features/manage-teachers/ui/CreateEduAdminDialog'
 import { ResetTeacherPasswordDialog } from '@/features/manage-teachers/ui/ResetTeacherPasswordDialog'
 import { useTeacherStore } from '@/entities/teacher/model/store'
+import { useAuthStore } from '@/entities/session/model/store'
+import { TENANT_ROLES } from '@/shared/config/constants'
 
 export function TeachersManagementPage() {
   const teachers = useTeacherStore((s) => s.items)
   const setSuperAdmin = useTeacherStore((s) => s.setSuperAdmin)
+  const isDirector = useAuthStore((s) => s.isDirector)
   const [pendingId, setPendingId] = useState(null)
 
   const handleToggleSuperAdmin = async (teacher, next) => {
@@ -30,9 +34,12 @@ export function TeachersManagementPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{teachers.length} ta ustoz</p>
-        <CreateTeacherDialog />
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{teachers.length} ta xodim</p>
+        <div className="flex items-center gap-2">
+          {isDirector && <CreateEduAdminDialog />}
+          <CreateTeacherDialog />
+        </div>
       </div>
 
       {teachers.length === 0 ? (
@@ -66,9 +73,14 @@ export function TeachersManagementPage() {
                   <td className="py-3">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-foreground">{teacher.fullName}</span>
-                      {teacher.isSuperAdmin && (
+                      {teacher.tenantRole === TENANT_ROLES.DIRECTOR && (
                         <Badge variant="coin" className="gap-1">
-                          <ShieldCheck className="size-3" /> Superadmin
+                          <Crown className="size-3" /> Direktor
+                        </Badge>
+                      )}
+                      {teacher.tenantRole === TENANT_ROLES.EDU_ADMIN && (
+                        <Badge variant="secondary" className="gap-1">
+                          <ShieldCheck className="size-3" /> EduSuperAdmin
                         </Badge>
                       )}
                     </div>
@@ -80,15 +92,19 @@ export function TeachersManagementPage() {
                   </td>
                   <td className="py-3 text-muted-foreground">{teacher.groupCount} ta guruh</td>
                   <td className="py-3">
-                    <Switch
-                      checked={teacher.isSuperAdmin}
-                      disabled={pendingId === teacher.id}
-                      onCheckedChange={(next) => handleToggleSuperAdmin(teacher, next)}
-                    />
+                    {teacher.tenantRole === TENANT_ROLES.DIRECTOR ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <Switch
+                        checked={teacher.isSuperAdmin}
+                        disabled={pendingId === teacher.id || !isDirector}
+                        onCheckedChange={(next) => handleToggleSuperAdmin(teacher, next)}
+                      />
+                    )}
                   </td>
                   <td className="py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <ResetTeacherPasswordDialog teacher={teacher} />
+                      {teacher.tenantRole !== TENANT_ROLES.DIRECTOR && <ResetTeacherPasswordDialog teacher={teacher} />}
                     </div>
                   </td>
                 </motion.tr>

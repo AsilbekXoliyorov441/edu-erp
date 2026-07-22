@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   ResponsiveContainer,
   BarChart,
@@ -25,6 +26,7 @@ import {
   Users2,
   GraduationCap,
   Coins,
+  AlertTriangle,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/ui/card'
@@ -35,14 +37,25 @@ import { ChartTooltip } from '@/shared/ui/chart-tooltip'
 import { ChartLegend } from '@/shared/ui/chart-legend'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { Meter } from '@/shared/ui/meter'
+import { AttendanceMeter } from '@/shared/ui/attendance-meter'
 import { cn } from '@/shared/lib/utils'
 import { useAuthStore } from '@/entities/session/model/store'
 import { useTransactionStore } from '@/entities/transaction/model/store'
 import { useGroupStore } from '@/entities/group/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
 import { useTeacherStore } from '@/entities/teacher/model/store'
-import { getFinanceOverview, getFinanceTrend, getSuperAdminOverview, getTeacherComparison } from '@/shared/lib/stats'
-import { COIN_TO_SOM_RATE, MAX_STUDENT_VALUE_SOM } from '@/shared/config/constants'
+import { useLessonStore } from '@/entities/lesson/model/store'
+import { useAttendanceStore } from '@/entities/attendance/model/store'
+import {
+  getFinanceOverview,
+  getFinanceTrend,
+  getSuperAdminOverview,
+  getTeacherComparison,
+  getSuperAdminAttendanceOverview,
+  getTeacherAttendanceComparison,
+  getAtRiskStudents,
+} from '@/shared/lib/stats'
+import { COIN_TO_SOM_RATE, MAX_STUDENT_VALUE_SOM, ROUTES } from '@/shared/config/constants'
 
 const GRANULARITY_OPTIONS = [
   { value: 'day', label: 'Kunlik' },
@@ -103,21 +116,29 @@ const PERIOD_ROWS = [
 
 export function TeachersDashboardPage() {
   const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin)
+  const centerCoinPrice = useAuthStore((s) => s.coinPriceSom)
+  const coinRate = centerCoinPrice ?? COIN_TO_SOM_RATE
   const transactions = useTransactionStore((s) => s.items)
   const groups = useGroupStore((s) => s.items)
   const students = useStudentStore((s) => s.items)
   const teachers = useTeacherStore((s) => s.items)
-  const finance = getFinanceOverview(transactions, COIN_TO_SOM_RATE)
+  const lessons = useLessonStore((s) => s.items)
+  const attendance = useAttendanceStore((s) => s.items)
+  const finance = getFinanceOverview(transactions, coinRate)
 
   const adminOverview = isSuperAdmin
-    ? getSuperAdminOverview({ teachers, groups, students, transactions }, COIN_TO_SOM_RATE, MAX_STUDENT_VALUE_SOM)
+    ? getSuperAdminOverview({ teachers, groups, students, transactions }, coinRate, MAX_STUDENT_VALUE_SOM)
     : null
   const teacherComparison = isSuperAdmin
-    ? getTeacherComparison({ teachers, groups, students, transactions }, COIN_TO_SOM_RATE, MAX_STUDENT_VALUE_SOM)
+    ? getTeacherComparison({ teachers, groups, students, transactions }, coinRate, MAX_STUDENT_VALUE_SOM)
     : []
+  const attendanceOverview = isSuperAdmin ? getSuperAdminAttendanceOverview({ students, attendance }) : null
+  const teacherAttendance = isSuperAdmin ? getTeacherAttendanceComparison({ teachers, groups, lessons, attendance }) : []
+  const teacherAttendanceById = new Map(teacherAttendance.map((t) => [t.teacherId, t]))
+  const atRiskStudents = isSuperAdmin ? getAtRiskStudents({ students, groups, attendance }) : []
 
   const [granularity, setGranularity] = useState('day')
-  const trendData = getFinanceTrend(transactions, COIN_TO_SOM_RATE, granularity)
+  const trendData = getFinanceTrend(transactions, coinRate, granularity)
   const hasTrendData = trendData.length > 0
 
   const periodChartData = PERIOD_ROWS.map((row) => ({
@@ -159,7 +180,7 @@ export function TeachersDashboardPage() {
               <AdminStatTile icon={Coins} label="O'rtacha coin/o'quvchi" value={`${Math.round(adminOverview.avgCoinsPerStudent)} coin`} />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="rounded-xl bg-muted/60 p-4">
                 <p className="text-xs text-muted-foreground">O'rtacha pul / o'quvchi</p>
                 <p className="mt-1 text-xl font-bold text-foreground">{somFormatter(adminOverview.avgMoneyPerStudent)}</p>
@@ -170,11 +191,14 @@ export function TeachersDashboardPage() {
                   label={`Limitdan foydalanish (maks. ${somFormatter(MAX_STUDENT_VALUE_SOM)}/o'quvchi)`}
                 />
               </div>
+              <div className="rounded-xl bg-muted/60 p-4">
+                <AttendanceMeter percent={attendanceOverview.attendanceRate} label="Umumiy davomat darajasi" />
+              </div>
             </div>
 
             {teacherComparison.length > 0 && (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm">
+                <table className="w-full min-w-160 text-sm">
                   <thead>
                     <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
                       <th className="py-2.5 font-medium">Ustoz</th>
@@ -183,6 +207,7 @@ export function TeachersDashboardPage() {
                       <th className="py-2.5 font-medium">O'rtacha coin</th>
                       <th className="py-2.5 font-medium">O'rtacha pul</th>
                       <th className="py-2.5 font-medium">Limitdan</th>
+                      <th className="py-2.5 font-medium">Davomat</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -196,10 +221,36 @@ export function TeachersDashboardPage() {
                         <td className="py-3">
                           <Meter percent={t.capUsagePercent} className="w-32" />
                         </td>
+                        <td className="py-3">
+                          <AttendanceMeter percent={teacherAttendanceById.get(t.teacherId)?.attendanceRate ?? null} className="w-32" />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {atRiskStudents.length > 0 && (
+              <div className="rounded-xl border border-border/60 p-4">
+                <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <AlertTriangle className="size-4 text-destructive" /> E'tibor talab qiladi (davomat 70% dan past)
+                </p>
+                <div className="divide-y divide-border/50">
+                  {atRiskStudents.map((s) => (
+                    <Link
+                      key={s.studentId}
+                      to={ROUTES.studentProfile(s.studentId)}
+                      className="flex items-center justify-between gap-3 py-2.5 text-sm transition-colors hover:text-primary"
+                    >
+                      <span className="font-medium text-foreground">{s.fullName}</span>
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        {s.groupName}
+                        <Badge variant="destructive">{Math.round(s.attendanceRate)}%</Badge>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>

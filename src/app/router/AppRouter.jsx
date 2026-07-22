@@ -4,10 +4,12 @@ import { ROUTES } from '@/shared/config/constants'
 import { RequireAuth } from '@/app/router/RequireAuth'
 import { RequireTeacher } from '@/app/router/RequireTeacher'
 import { RequireSuperAdmin } from '@/app/router/RequireSuperAdmin'
+import { RequirePlatformAdmin } from '@/app/router/RequirePlatformAdmin'
 import { RequireStudent } from '@/app/router/RequireStudent'
 import { HomeRoute } from '@/app/router/HomeRoute'
 import { AppLayout } from '@/app/layout/AppLayout'
 import { LoginPage } from '@/pages/LoginPage/LoginPage'
+import { PlatformAdminPage } from '@/pages/PlatformAdminPage/PlatformAdminPage'
 import { GroupsPage } from '@/pages/GroupsPage/GroupsPage'
 import { GroupDetailPage } from '@/pages/GroupDetailPage/GroupDetailPage'
 import { StudentProfilePage } from '@/pages/StudentProfilePage/StudentProfilePage'
@@ -36,6 +38,14 @@ export function AppRouter() {
           }
         >
           <Route index element={<HomeRoute />} />
+          <Route
+            path="platforma"
+            element={
+              <RequirePlatformAdmin>
+                <PlatformAdminPage />
+              </RequirePlatformAdmin>
+            }
+          />
           <Route
             path="guruhlar"
             element={

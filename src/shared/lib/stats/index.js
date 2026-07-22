@@ -1,4 +1,5 @@
 export * from '@/shared/lib/stats/adminOverview'
+export * from '@/shared/lib/stats/attendance'
 export * from '@/shared/lib/stats/balance'
 export * from '@/shared/lib/stats/breakdown'
 export * from '@/shared/lib/stats/finance'

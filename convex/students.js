@@ -14,7 +14,7 @@ export const list = query({
   handler: async (ctx, { token }) => {
     const groupIdSet = await getScopedGroupIdSet(ctx, token)
     const students = await ctx.db.query('students').collect()
-    const scoped = groupIdSet === null ? students : students.filter((s) => groupIdSet.has(s.groupId))
+    const scoped = students.filter((s) => groupIdSet.has(s.groupId))
     return scoped.map(stripCredentials)
   },
 })
@@ -26,7 +26,7 @@ export const listForTeacher = query({
   handler: async (ctx, { token }) => {
     const groupIdSet = await getScopedGroupIdSet(ctx, token)
     const students = await ctx.db.query('students').collect()
-    const scoped = groupIdSet === null ? students : students.filter((s) => groupIdSet.has(s.groupId))
+    const scoped = students.filter((s) => groupIdSet.has(s.groupId))
     return scoped.map((student) => {
       const rest = { ...student }
       delete rest.passwordHash

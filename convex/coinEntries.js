@@ -7,6 +7,6 @@ export const list = query({
   handler: async (ctx, { token }) => {
     const studentIdSet = await getScopedStudentIdSet(ctx, token)
     const entries = await ctx.db.query('coinEntries').collect()
-    return studentIdSet === null ? entries : entries.filter((e) => studentIdSet.has(e.studentId))
+    return entries.filter((e) => studentIdSet.has(e.studentId))
   },
 })

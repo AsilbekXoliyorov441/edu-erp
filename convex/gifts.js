@@ -1,11 +1,40 @@
 import { query, mutation, internalMutation } from './_generated/server'
-import { v } from 'convex/values'
-import { requireTeacher } from './lib/authz'
+import { v, ConvexError } from 'convex/values'
+import { getScope } from './lib/scoping'
+
+/** Coin market is per-center — every gift belongs to exactly one `centers` row. Any
+ * center-side role (`director`/`edu_admin`/`teacher`) can browse/manage their own center's
+ * catalog; the platform SuperAdmin doesn't touch it directly. */
+async function requireCenterTeacher(ctx, token) {
+  const scope = await getScope(ctx, token)
+  if (scope.platformAdmin || scope.session.role !== 'teacher') {
+    throw new ConvexError("O'qituvchi huquqi talab qilinadi")
+  }
+  return scope
+}
+
+/** Read access is broader than management: a student also browses their own center's
+ * catalog (Coin Market, student profile) to see what they can redeem. */
+async function requireCenterAccess(ctx, token) {
+  const scope = await getScope(ctx, token)
+  if (scope.platformAdmin) throw new ConvexError("Bu bo'limga ruxsatingiz yo'q")
+  return scope
+}
+
+async function requireCenterGift(ctx, scope, id) {
+  const gift = await ctx.db.get(id)
+  if (!gift || gift.centerId !== scope.centerId) throw new ConvexError("Bu sovg'aga ruxsatingiz yo'q")
+  return gift
+}
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db.query('gifts').collect()
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const scope = await requireCenterAccess(ctx, token)
+    return await ctx.db
+      .query('gifts')
+      .withIndex('by_center', (q) => q.eq('centerId', scope.centerId))
+      .collect()
   },
 })
 
@@ -19,8 +48,8 @@ export const create = mutation({
     category: v.optional(v.string()),
   },
   handler: async (ctx, { token, name, icon, price, image, category }) => {
-    await requireTeacher(ctx, token)
-    return await ctx.db.insert('gifts', { name, icon, price, image, category })
+    const scope = await requireCenterTeacher(ctx, token)
+    return await ctx.db.insert('gifts', { name, icon, price, image, category, centerId: scope.centerId })
   },
 })
 
@@ -35,7 +64,8 @@ export const update = mutation({
     category: v.optional(v.string()),
   },
   handler: async (ctx, { token, id, name, icon, price, image, category }) => {
-    await requireTeacher(ctx, token)
+    const scope = await requireCenterTeacher(ctx, token)
+    await requireCenterGift(ctx, scope, id)
     await ctx.db.patch(id, { name, icon, price, image, category })
   },
 })
@@ -43,7 +73,8 @@ export const update = mutation({
 export const remove = mutation({
   args: { token: v.string(), id: v.id('gifts') },
   handler: async (ctx, { token, id }) => {
-    await requireTeacher(ctx, token)
+    const scope = await requireCenterTeacher(ctx, token)
+    await requireCenterGift(ctx, scope, id)
     await ctx.db.delete(id)
   },
 })

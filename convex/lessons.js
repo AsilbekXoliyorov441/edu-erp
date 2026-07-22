@@ -10,7 +10,7 @@ export const list = query({
   handler: async (ctx, { token }) => {
     const groupIdSet = await getScopedGroupIdSet(ctx, token)
     const lessons = await ctx.db.query('lessons').collect()
-    return groupIdSet === null ? lessons : lessons.filter((l) => groupIdSet.has(l.groupId))
+    return lessons.filter((l) => groupIdSet.has(l.groupId))
   },
 })
 
@@ -22,9 +22,12 @@ export const saveSession = mutation({
     token: v.string(),
     groupId: v.id('groups'),
     scores: v.array(v.object({ studentId: v.id('students'), category: v.string(), value: v.number() })),
+    attendance: v.array(
+      v.object({ studentId: v.id('students'), status: v.union(v.literal('present'), v.literal('late'), v.literal('absent')) })
+    ),
     date: v.string(),
   },
-  handler: async (ctx, { token, groupId, scores, date }) => {
+  handler: async (ctx, { token, groupId, scores, attendance, date }) => {
     await requireGroupOwner(ctx, token, groupId)
 
     const groupLessons = await ctx.db
@@ -63,11 +66,22 @@ export const saveSession = mutation({
       coinsGiven += value
     }
 
-    return { lessonId, lessonNumber, monthIndex, entriesCount, coinsGiven }
+    let presentCount = 0
+    let lateCount = 0
+    let absentCount = 0
+
+    for (const record of attendance) {
+      await ctx.db.insert('attendance', { lessonId, studentId: record.studentId, status: record.status })
+      if (record.status === 'present') presentCount += 1
+      else if (record.status === 'late') lateCount += 1
+      else if (record.status === 'absent') absentCount += 1
+    }
+
+    return { lessonId, lessonNumber, monthIndex, entriesCount, coinsGiven, presentCount, lateCount, absentCount }
   },
 })
 
-/** Deletes one or many lessons together with their coin entries and transactions. */
+/** Deletes one or many lessons together with their coin entries, transactions, and attendance. */
 export const removeCascade = mutation({
   args: { token: v.string(), ids: v.array(v.id('lessons')) },
   handler: async (ctx, { token, ids }) => {
@@ -81,8 +95,12 @@ export const removeCascade = mutation({
     const allTransactions = await ctx.db.query('transactions').collect()
     const transactionsToDelete = allTransactions.filter((t) => t.relatedEntryId && entryIdSet.has(t.relatedEntryId))
 
+    const allAttendance = await ctx.db.query('attendance').collect()
+    const attendanceToDelete = allAttendance.filter((a) => lessonIdSet.has(a.lessonId))
+
     for (const txn of transactionsToDelete) await ctx.db.delete(txn._id)
     for (const entry of entriesToDelete) await ctx.db.delete(entry._id)
+    for (const record of attendanceToDelete) await ctx.db.delete(record._id)
     for (const lessonId of ids) await ctx.db.delete(lessonId)
   },
 })

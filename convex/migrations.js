@@ -1,4 +1,5 @@
 import { internalMutation } from './_generated/server'
+import { v } from 'convex/values'
 
 /** One-time migration for the multi-teacher rollout. Promotes the sole pre-existing
  * teacher to superadmin and backfills `teacherId` on every existing group so old data
@@ -87,5 +88,51 @@ export const backfillTestsToTopics = internalMutation({
     }
 
     return { ok: true, testsPatched, testsSkippedOrphaned, attemptsMigrated, attemptsDroppedAmbiguous }
+  },
+})
+
+/** One-time migration for the multi-tenant rollout. Creates the first `centers` row from
+ * all of today's data, attaches every existing teacher to it (old `isSuperAdmin` teachers
+ * become that center's `director`, everyone else becomes a plain `teacher`), and attaches
+ * every existing gift to it too (the coin market used to be global). Nothing is deleted —
+ * `teacher.isSuperAdmin` is left in place, just superseded by `role`. Refuses to run once
+ * any teacher already has a `role` (by then multi-tenancy is already bootstrapped).
+ * Run via: npx convex run migrations:bootstrapMultiTenant '{"centerName":"..."}' */
+export const bootstrapMultiTenant = internalMutation({
+  args: { centerName: v.string() },
+  handler: async (ctx, { centerName }) => {
+    const teachers = await ctx.db.query('teachers').collect()
+    if (teachers.some((t) => t.role)) {
+      return { ok: false, error: 'Already migrated to multi-tenant — a teacher already has a role.' }
+    }
+
+    const now = new Date()
+    const fiveYearsOut = new Date(now)
+    fiveYearsOut.setFullYear(fiveYearsOut.getFullYear() + 5)
+
+    const centerId = await ctx.db.insert('centers', {
+      name: centerName,
+      status: 'active',
+      createdAt: now.toISOString(),
+      subscriptionPrice: 0,
+      subscriptionEndsAt: fiveYearsOut.toISOString(),
+      coinPriceSom: 130,
+    })
+
+    let directors = 0
+    let regularTeachers = 0
+    for (const teacher of teachers) {
+      const role = teacher.isSuperAdmin ? 'director' : 'teacher'
+      await ctx.db.patch(teacher._id, { role, centerId })
+      if (role === 'director') directors += 1
+      else regularTeachers += 1
+    }
+
+    const gifts = await ctx.db.query('gifts').collect()
+    for (const gift of gifts) {
+      await ctx.db.patch(gift._id, { centerId })
+    }
+
+    return { ok: true, centerId, directors, regularTeachers, giftsPatched: gifts.length }
   },
 })

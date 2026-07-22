@@ -9,6 +9,7 @@ import { EmptyState } from '@/shared/ui/empty-state'
 import { StudentRosterTable } from '@/widgets/StudentRosterTable/StudentRosterTable'
 import { LessonSessionPanel } from '@/widgets/LessonSessionPanel/LessonSessionPanel'
 import { LessonsList } from '@/widgets/LessonsList/LessonsList'
+import { AttendanceHistory } from '@/widgets/AttendanceHistory/AttendanceHistory'
 import { AddStudentDialog } from '@/features/add-student/ui/AddStudentDialog'
 import { RenameGroupDialog } from '@/features/rename-group/ui/RenameGroupDialog'
 import { DeleteGroupDialog } from '@/features/remove-group/ui/DeleteGroupDialog'
@@ -17,6 +18,7 @@ import { useGroupStore } from '@/entities/group/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
 import { useLessonStore } from '@/entities/lesson/model/store'
 import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
+import { useAttendanceStore } from '@/entities/attendance/model/store'
 import { useTransactionStore } from '@/entities/transaction/model/store'
 import { useTestsForGroup } from '@/entities/test-assignment/model/store'
 import { getGroupStats } from '@/shared/lib/stats'
@@ -72,6 +74,7 @@ export function GroupDetailPage() {
   const lessons = useLessonStore((s) => s.items)
   const coinEntries = useCoinEntryStore((s) => s.items)
   const transactions = useTransactionStore((s) => s.items)
+  const attendance = useAttendanceStore((s) => s.items)
 
   const group = groups.find((g) => g.id === groupId)
 
@@ -155,6 +158,7 @@ export function GroupDetailPage() {
           <TabsList>
             <TabsTrigger value="students">O'quvchilar</TabsTrigger>
             <TabsTrigger value="lessons">Darslar</TabsTrigger>
+            <TabsTrigger value="attendance">Davomat</TabsTrigger>
             <TabsTrigger value="tests">Testlar</TabsTrigger>
           </TabsList>
           <TabsContent value="students">
@@ -168,6 +172,13 @@ export function GroupDetailPage() {
             <Card>
               <CardContent className="p-5">
                 <LessonsList lessons={groupLessons} coinEntries={coinEntries} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="attendance">
+            <Card>
+              <CardContent className="p-5">
+                <AttendanceHistory lessons={groupLessons} attendance={attendance} students={groupStudents} />
               </CardContent>
             </Card>
           </TabsContent>

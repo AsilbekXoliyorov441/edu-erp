@@ -1,6 +1,14 @@
 export const ROLES = {
+  PLATFORM_ADMIN: 'platform_admin',
   TEACHER: 'teacher',
   STUDENT: 'student',
+}
+
+/** Fine-grained role within a center (only meaningful when `ROLES.role === ROLES.TEACHER`). */
+export const TENANT_ROLES = {
+  DIRECTOR: 'director',
+  EDU_ADMIN: 'edu_admin',
+  TEACHER: 'teacher',
 }
 
 /** Fixed coin categories and their per-lesson max value — enforced across every coin input. */
@@ -36,6 +44,7 @@ export const STUDENT_STATUS = {
 export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
+  PLATFORM_ADMIN: '/platforma',
   GROUPS: '/guruhlar',
   GROUP_DETAIL: '/guruhlar/:groupId',
   groupDetail: (id) => `/guruhlar/${id}`,

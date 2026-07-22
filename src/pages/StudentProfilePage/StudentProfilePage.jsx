@@ -10,6 +10,7 @@ import { EmptyState } from '@/shared/ui/empty-state'
 import { StudentAvatar } from '@/entities/student/ui/StudentAvatar'
 import { StudentCharts } from '@/widgets/StudentCharts/StudentCharts'
 import { StudentLessonProgress } from '@/widgets/StudentLessonProgress/StudentLessonProgress'
+import { StudentAttendanceSummary } from '@/widgets/StudentAttendanceSummary/StudentAttendanceSummary'
 import { StudentTimeline } from '@/widgets/StudentTimeline/StudentTimeline'
 import { GiftGrid } from '@/widgets/GiftGrid/GiftGrid'
 import { RedeemGiftDialog } from '@/features/redeem-gift/ui/RedeemGiftDialog'
@@ -20,6 +21,7 @@ import { useLessonStore } from '@/entities/lesson/model/store'
 import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
 import { useTransactionStore } from '@/entities/transaction/model/store'
 import { useGiftStore } from '@/entities/gift/model/store'
+import { useAttendanceStore } from '@/entities/attendance/model/store'
 import { getStudentBalance, getLeaderboard } from '@/shared/lib/stats'
 import { formatUzDate } from '@/shared/lib/date'
 import { ROLES, ROUTES } from '@/shared/config/constants'
@@ -35,6 +37,7 @@ export function StudentProfilePage() {
   const coinEntries = useCoinEntryStore((s) => s.items)
   const transactions = useTransactionStore((s) => s.items)
   const gifts = useGiftStore((s) => s.items)
+  const attendance = useAttendanceStore((s) => s.items)
 
   const isBlocked = role === ROLES.STUDENT && studentId !== userId
 
@@ -105,7 +108,12 @@ export function StudentProfilePage() {
         </CardContent>
       </Card>
 
-      <StudentLessonProgress studentId={student.id} group={group} lessons={lessons} coinEntries={coinEntries} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <StudentLessonProgress studentId={student.id} group={group} lessons={lessons} coinEntries={coinEntries} />
+        </div>
+        <StudentAttendanceSummary studentId={student.id} attendance={attendance} />
+      </div>
 
       <StudentCharts studentId={student.id} coinEntries={coinEntries} lessons={lessons} />
 

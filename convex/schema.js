@@ -50,6 +50,11 @@ export default defineSchema({
     login: v.string(),
     passwordHash: v.string(),
     status: v.union(v.literal('active'), v.literal('removed')),
+    /** Set only on the losing row of a `students.transfer` merge, when a teacher confirmed
+     * that a duplicate in the target group is the same person. The row itself is kept
+     * (status `removed`) so the merge stays auditable and reversible; all of its history has
+     * been re-pointed at the student named here. */
+    mergedIntoId: v.optional(v.id('students')),
   })
     .index('by_login', ['login'])
     .index('by_group', ['groupId']),

@@ -14,10 +14,13 @@ export function useStudentStore(selector) {
 
   const createAction = useAction(api.studentsActions.create)
   const updateStatusMutation = useMutation(api.students.updateStatus)
+  const transferMutation = useMutation(api.students.transfer)
 
   return selector({
     items,
     create: (groupId, fullName) => createAction({ token, groupId, fullName }),
     updateStatus: (id, status) => updateStatusMutation({ token, id, status }),
+    transfer: (targetGroupId, studentIds, merges) =>
+      transferMutation({ token, targetGroupId, studentIds, merges }),
   })
 }

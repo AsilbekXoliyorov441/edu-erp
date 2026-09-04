@@ -5,7 +5,7 @@ import { AnalyticsCharts } from '@/widgets/AnalyticsCharts/AnalyticsCharts'
 import { Card, CardContent } from '@/shared/ui/card'
 import { useGroupStore } from '@/entities/group/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
-import { ROUTES } from '@/shared/config/constants'
+import { ROUTES, STUDENT_STATUS } from '@/shared/config/constants'
 
 export function DashboardPage() {
   const groups = useGroupStore((s) => s.items)
@@ -34,7 +34,7 @@ export function DashboardPage() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">{group.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {students.filter((s) => s.groupId === group.id).length} o'quvchi
+                      {students.filter((s) => s.groupId === group.id && s.status === STUDENT_STATUS.ACTIVE).length} o'quvchi
                     </p>
                   </div>
                 </CardContent>

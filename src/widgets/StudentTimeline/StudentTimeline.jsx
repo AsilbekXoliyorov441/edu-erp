@@ -1,10 +1,24 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Coins, Gift as GiftIconLucide, History } from 'lucide-react'
+import { Coins, Flame, Gift as GiftIconLucide, History } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { COIN_CATEGORIES, TRANSACTION_TYPES } from '@/shared/config/constants'
-import { formatRelativeUz } from '@/shared/lib/date'
+import { formatRelativeUz, formatUzMonthYear } from '@/shared/lib/date'
+
+function getBurnLabel(month) {
+  if (!month) return 'Coin kuydi'
+  const [year, m] = month.split('-').map(Number)
+  return `${formatUzMonthYear(year, m - 1)}: oylik maqsadga yetilmadi — coin kuydi`
+}
+
+function getLabel(t, entryById, giftById) {
+  if (t.type === TRANSACTION_TYPES.COIN_GIVEN) {
+    return COIN_CATEGORIES[entryById.get(t.relatedEntryId)?.category]?.label ?? 'Coin berildi'
+  }
+  if (t.type === TRANSACTION_TYPES.COIN_BURNED) return getBurnLabel(t.month)
+  return giftById.get(t.relatedGiftId)?.name ?? "Sovg'a"
+}
 
 function buildTimeline(studentId, transactions, coinEntries, gifts) {
   const entryById = new Map(coinEntries.map((e) => [e.id, e]))
@@ -17,10 +31,7 @@ function buildTimeline(studentId, transactions, coinEntries, gifts) {
       type: t.type,
       timestamp: t.timestamp,
       amount: t.amount,
-      label:
-        t.type === TRANSACTION_TYPES.COIN_GIVEN
-          ? (COIN_CATEGORIES[entryById.get(t.relatedEntryId)?.category]?.label ?? 'Coin berildi')
-          : (giftById.get(t.relatedGiftId)?.name ?? "Sovg'a"),
+      label: getLabel(t, entryById, giftById),
     }))
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
 }
@@ -55,6 +66,7 @@ export function StudentTimeline({ studentId, transactions, coinEntries, gifts })
         <div className="max-h-[26rem] space-y-1 overflow-y-auto pr-1">
           {filtered.map((item, index) => {
             const isCoin = item.type === TRANSACTION_TYPES.COIN_GIVEN
+            const isBurn = item.type === TRANSACTION_TYPES.COIN_BURNED
             return (
               <motion.div
                 key={item.id}
@@ -67,10 +79,12 @@ export function StudentTimeline({ studentId, transactions, coinEntries, gifts })
                   className={
                     isCoin
                       ? 'flex size-9 shrink-0 items-center justify-center rounded-xl bg-success/15 text-success'
-                      : "flex size-9 shrink-0 items-center justify-center rounded-xl bg-coin/15 text-coin-foreground dark:text-coin"
+                      : isBurn
+                        ? 'flex size-9 shrink-0 items-center justify-center rounded-xl bg-destructive/15 text-destructive'
+                        : 'flex size-9 shrink-0 items-center justify-center rounded-xl bg-coin/15 text-coin-foreground dark:text-coin'
                   }
                 >
-                  {isCoin ? <Coins className="size-4" /> : <GiftIconLucide className="size-4" />}
+                  {isCoin ? <Coins className="size-4" /> : isBurn ? <Flame className="size-4" /> : <GiftIconLucide className="size-4" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{item.label}</p>

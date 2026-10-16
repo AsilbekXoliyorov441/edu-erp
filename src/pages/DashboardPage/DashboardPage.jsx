@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Users2 } from 'lucide-react'
 import { StatsOverview } from '@/widgets/StatsOverview/StatsOverview'
 import { AnalyticsCharts } from '@/widgets/AnalyticsCharts/AnalyticsCharts'
+import { MonthlyGoalOverview } from '@/widgets/MonthlyGoal/MonthlyGoalOverview'
 import { Card, CardContent } from '@/shared/ui/card'
 import { useGroupStore } from '@/entities/group/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
@@ -14,6 +15,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <StatsOverview />
+      <MonthlyGoalOverview />
       <AnalyticsCharts />
 
       <div>

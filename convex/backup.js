@@ -139,6 +139,7 @@ export const importAll = mutation({
         amount: t.amount,
         relatedEntryId: t.relatedEntryId ? entryIdMap.get(t.relatedEntryId) : undefined,
         relatedGiftId: t.relatedGiftId ?? undefined,
+        month: t.month ?? undefined,
         timestamp: t.timestamp,
       })
     }

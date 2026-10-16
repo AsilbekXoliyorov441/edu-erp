@@ -34,6 +34,22 @@ export const MAX_STUDENT_VALUE_SOM = 330000
 export const TRANSACTION_TYPES = {
   COIN_GIVEN: 'coin_given',
   GIFT_REDEEMED: 'gift_redeemed',
+  /** Written by the monthly-goal cron when a student closes a month below the goal — the
+   * coins earned that month "burn" (are subtracted from the balance). */
+  COIN_BURNED: 'coin_burned',
+}
+
+/** Monthly coin goal ("oylik maqsad"): a student must collect at least `PERCENT`% of the
+ * coins that were possible for them in a calendar month, otherwise that month's coins burn
+ * when the month closes. Months before `START_MONTH` are never evaluated, so coins collected
+ * earlier are never affected. Months are calendar months in Tashkent time (UTC+5). */
+export const MONTHLY_GOAL = {
+  PERCENT: 70,
+  START_MONTH: '2026-10',
+  TZ_OFFSET_HOURS: 5,
+  /** A month is closed only on day `CLOSE_GRACE_DAYS + 1` of the next month, so lessons
+   * teachers enter late (backdated) still count toward the month they belong to. */
+  CLOSE_GRACE_DAYS: 3,
 }
 
 export const STUDENT_STATUS = {

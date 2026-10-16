@@ -13,6 +13,7 @@ import { StudentLessonProgress } from '@/widgets/StudentLessonProgress/StudentLe
 import { StudentAttendanceSummary } from '@/widgets/StudentAttendanceSummary/StudentAttendanceSummary'
 import { StudentTimeline } from '@/widgets/StudentTimeline/StudentTimeline'
 import { GiftGrid } from '@/widgets/GiftGrid/GiftGrid'
+import { MonthlyGoalCard } from '@/widgets/MonthlyGoal/MonthlyGoalCard'
 import { RedeemGiftDialog } from '@/features/redeem-gift/ui/RedeemGiftDialog'
 import { useAuthStore } from '@/entities/session/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
@@ -107,6 +108,8 @@ export function StudentProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      <MonthlyGoalCard studentId={student.id} isSelf={role === ROLES.STUDENT} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">

@@ -96,12 +96,30 @@ export default defineSchema({
 
   transactions: defineTable({
     studentId: v.id('students'),
-    type: v.union(v.literal('coin_given'), v.literal('gift_redeemed')),
+    type: v.union(v.literal('coin_given'), v.literal('gift_redeemed'), v.literal('coin_burned')),
     amount: v.number(),
+    /** `coin_burned` only: the `YYYY-MM` month whose coins burned. */
+    month: v.optional(v.string()),
     relatedEntryId: v.optional(v.id('coinEntries')),
     relatedGiftId: v.optional(v.id('gifts')),
     timestamp: v.string(),
   }).index('by_student', ['studentId']),
+
+  /** One row per (student, closed month) written by `monthlyGoal.closeMonth` — the frozen
+   * result of the monthly 70% goal check. Its existence is also what makes the cron
+   * idempotent: a student/month pair that already has a row is never evaluated twice. */
+  monthlyGoalResults: defineTable({
+    studentId: v.id('students'),
+    month: v.string(),
+    earned: v.number(),
+    possible: v.number(),
+    percent: v.number(),
+    reached: v.boolean(),
+    burned: v.number(),
+    processedAt: v.string(),
+  })
+    .index('by_student', ['studentId'])
+    .index('by_month', ['month']),
 
   gifts: defineTable({
     name: v.string(),

@@ -117,6 +117,7 @@ async function absorbStudentHistory(ctx, fromId, toId) {
     ...(await ctx.db.query('coinEntries').withIndex('by_student', byStudent).collect()),
     ...(await ctx.db.query('attendance').withIndex('by_student', byStudent).collect()),
     ...(await ctx.db.query('testAttempts').withIndex('by_student', byStudent).collect()),
+    ...(await ctx.db.query('monthlyGoalResults').withIndex('by_student', byStudent).collect()),
   ]
   for (const row of rest) await ctx.db.patch(row._id, { studentId: toId })
 

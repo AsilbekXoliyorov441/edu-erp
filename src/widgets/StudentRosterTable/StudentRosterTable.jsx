@@ -8,6 +8,8 @@ import { Button } from '@/shared/ui/button'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { RemoveStudentDialog } from '@/features/remove-student/ui/RemoveStudentDialog'
 import { TransferStudentsDialog } from '@/features/transfer-student/ui/TransferStudentsDialog'
+import { GoalProgressInline } from '@/shared/ui/goal-progress'
+import { useCurrentMonthGoal } from '@/entities/monthly-goal/model/store'
 import { getStudentBalance } from '@/shared/lib/stats'
 import { formatUzDate } from '@/shared/lib/date'
 import { ROUTES } from '@/shared/config/constants'
@@ -17,6 +19,7 @@ const checkboxClass =
 
 export function StudentRosterTable({ students, transactions }) {
   const [selectedIds, setSelectedIds] = useState([])
+  const monthlyGoal = useCurrentMonthGoal()
 
   if (students.length === 0) {
     return <EmptyState icon={Users} title="O'quvchilar yo'q" description="Guruhga birinchi o'quvchini qo'shing." />
@@ -54,7 +57,7 @@ export function StudentRosterTable({ students, transactions }) {
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[680px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead>
             <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
               <th className="w-8 py-2.5">
@@ -69,6 +72,7 @@ export function StudentRosterTable({ students, transactions }) {
               <th className="py-2.5 font-medium">O'quvchi</th>
               <th className="py-2.5 font-medium">Qo'shilgan sana</th>
               <th className="py-2.5 font-medium">Login</th>
+              {monthlyGoal.active && <th className="py-2.5 pl-4 font-medium">Oylik maqsad</th>}
               <th className="py-2.5 text-right font-medium">Coinlar</th>
               <th className="py-2.5" />
             </tr>
@@ -104,6 +108,11 @@ export function StudentRosterTable({ students, transactions }) {
                     {student.login}
                   </span>
                 </td>
+                {monthlyGoal.active && (
+                  <td className="py-3 pl-4">
+                    <GoalProgressInline progress={monthlyGoal.progress.get(student.id)} className="w-36" />
+                  </td>
+                )}
                 <td className="py-3 text-right">
                   <Badge variant="coin">{getStudentBalance(student.id, transactions)} coin</Badge>
                 </td>

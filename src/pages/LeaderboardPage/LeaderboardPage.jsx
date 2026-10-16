@@ -7,6 +7,7 @@ import { Badge } from '@/shared/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StudentAvatar } from '@/entities/student/ui/StudentAvatar'
+import { MonthlyGoalCard } from '@/widgets/MonthlyGoal/MonthlyGoalCard'
 import { useAuthStore } from '@/entities/session/model/store'
 import { useGroupStore } from '@/entities/group/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
@@ -48,6 +49,8 @@ export function LeaderboardPage() {
 
   return (
     <div className="space-y-5">
+      {role === ROLES.STUDENT && <MonthlyGoalCard studentId={userId} isSelf compact />}
+
       <div className="flex flex-wrap items-center gap-3">
         <Select value={groupId} onValueChange={setGroupId}>
           <SelectTrigger className="w-48">

@@ -118,7 +118,7 @@ export function StudentProfilePage() {
         <StudentAttendanceSummary studentId={student.id} attendance={attendance} />
       </div>
 
-      <StudentCharts studentId={student.id} coinEntries={coinEntries} lessons={lessons} />
+      <StudentCharts studentId={student.id} coinEntries={coinEntries} lessons={lessons} attendance={attendance} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">

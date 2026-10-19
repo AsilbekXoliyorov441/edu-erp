@@ -1,7 +1,7 @@
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Fragment } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Moon, Sun, LogOut, User } from 'lucide-react'
-import { Button } from '@/shared/ui/button'
+import { ChevronRight, Moon, Sun, LogOut } from 'lucide-react'
 import { Badge } from '@/shared/ui/badge'
 import {
   DropdownMenu,
@@ -12,7 +12,9 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/ui/dropdown-menu'
 import { useThemeStore } from '@/shared/lib/store/themeStore'
+import { useBreadcrumbStore } from '@/shared/lib/store/breadcrumbStore'
 import { useAuthStore } from '@/entities/session/model/store'
+import { getInitials } from '@/entities/student/lib/getInitials'
 import { ROLES, ROUTES, TENANT_ROLES } from '@/shared/config/constants'
 
 const PAGE_TITLES = {
@@ -23,6 +25,7 @@ const PAGE_TITLES = {
   [ROUTES.LEADERBOARD]: 'Reyting',
   [ROUTES.SETTINGS]: 'Sozlamalar',
   [ROUTES.TESTS]: 'Testlar',
+  [ROUTES.GAMES]: "O'yinlar",
 }
 
 const TENANT_ROLE_LABELS = {
@@ -36,7 +39,17 @@ function resolveTitle(pathname) {
   if (pathname.startsWith('/oquvchi/')) return "O'quvchi profili"
   if (pathname.endsWith('/yechish')) return 'Test topshirish'
   if (pathname.startsWith('/testlar/')) return 'Mavzu'
+  if (pathname.startsWith('/oyinlar/')) return "Jonli o'yin"
   return PAGE_TITLES[pathname] ?? 'Coin System'
+}
+
+/** Breadcrumb items as `{ label, to? }`. Group detail pages link back to "Guruhlar" and append
+ * whatever trail the page pushed (group name, grading session); every other page is one crumb. */
+function resolveCrumbs(pathname, trail) {
+  if (pathname.startsWith('/guruhlar/')) {
+    return [{ label: 'Guruhlar', to: ROUTES.GROUPS }, ...(trail?.length ? trail : ['Guruh']).map((label) => ({ label }))]
+  }
+  return [{ label: resolveTitle(pathname) }]
 }
 
 export function Header() {
@@ -44,6 +57,7 @@ export function Header() {
   const navigate = useNavigate()
   const theme = useThemeStore((s) => s.theme)
   const toggleTheme = useThemeStore((s) => s.toggleTheme)
+  const trail = useBreadcrumbStore((s) => s.trail)
   const role = useAuthStore((s) => s.role)
   const tenantRole = useAuthStore((s) => s.tenantRole)
   const fullName = useAuthStore((s) => s.fullName)
@@ -57,23 +71,43 @@ export function Header() {
         ? "O'quvchi"
         : (TENANT_ROLE_LABELS[tenantRole] ?? "O'qituvchi")
 
-  return (
-    <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border/60 bg-background/70 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
-      <AnimatePresence mode="wait">
-        <motion.h1
-          key={resolveTitle(location.pathname)}
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 4 }}
-          transition={{ duration: 0.15 }}
-          className="text-lg font-semibold text-foreground sm:text-xl"
-        >
-          {resolveTitle(location.pathname)}
-        </motion.h1>
-      </AnimatePresence>
+  const crumbs = resolveCrumbs(location.pathname, trail)
 
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Mavzuni almashtirish">
+  return (
+    <header className="sticky top-0 z-30 flex min-h-[64px] items-center justify-between gap-3 border-b border-[var(--cs-border)] bg-[var(--cs-surface)] px-4 py-[10px] sm:px-6 lg:px-[28px]">
+      <nav aria-label="Breadcrumb" className="min-w-0">
+        <ol className="flex min-w-0 items-center gap-[8px] text-[14px] text-[var(--cs-muted)]">
+          {crumbs.map((crumb, index) => {
+            const isLast = index === crumbs.length - 1
+            return (
+              <Fragment key={`${index}-${crumb.label}`}>
+                {index > 0 && (
+                  <li aria-hidden="true" className="flex shrink-0">
+                    <ChevronRight size={16} />
+                  </li>
+                )}
+                <li className={isLast ? 'min-w-0 truncate font-bold text-[var(--cs-text)]' : 'shrink-0'}>
+                  {crumb.to && !isLast ? (
+                    <Link to={crumb.to} className="cs-focus rounded-[4px] hover:text-[var(--cs-text)]">
+                      {crumb.label}
+                    </Link>
+                  ) : (
+                    <span aria-current={isLast ? 'page' : undefined}>{crumb.label}</span>
+                  )}
+                </li>
+              </Fragment>
+            )
+          })}
+        </ol>
+      </nav>
+
+      <div className="flex shrink-0 items-center gap-[8px]">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label="Mavzuni almashtirish"
+          className="cs-focus flex size-[40px] cursor-pointer items-center justify-center rounded-[10px] border border-[var(--cs-border)] bg-[var(--cs-surface)] text-[var(--cs-text-3)] transition-colors hover:bg-[var(--cs-hover)]"
+        >
           <AnimatePresence mode="wait" initial={false}>
             <motion.span
               key={theme}
@@ -83,17 +117,22 @@ export function Header() {
               transition={{ duration: 0.2 }}
               className="flex"
             >
-              {theme === 'dark' ? <Moon className="size-4" /> : <Sun className="size-4" />}
+              {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
             </motion.span>
           </AnimatePresence>
-        </Button>
+        </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <User className="size-4" />
-              <span className="hidden sm:inline">{fullName}</span>
-            </Button>
+            <button
+              type="button"
+              className="cs-focus flex h-[40px] cursor-pointer items-center gap-[8px] rounded-full border border-[var(--cs-border)] bg-[var(--cs-surface)] pr-[14px] pl-[5px] transition-colors hover:bg-[var(--cs-hover)]"
+            >
+              <span className="flex size-[30px] items-center justify-center rounded-full bg-[var(--cs-avatar-bg)] text-[12px] font-extrabold text-[var(--cs-avatar-text)]">
+                {getInitials(fullName) || '?'}
+              </span>
+              <span className="hidden text-[14px] font-semibold text-[var(--cs-text)] sm:inline">{fullName}</span>
+            </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel className="flex flex-col gap-1.5">

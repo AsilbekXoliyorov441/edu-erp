@@ -1,5 +1,6 @@
 import { COIN_CATEGORY_LIST, STUDENT_STATUS } from '@/shared/config/constants'
 import { getTotalCoinsDistributed } from '@/shared/lib/stats/balance'
+import { LESSON_MAX_COINS } from '@/shared/lib/stats/monthlyGoal'
 
 export function getDashboardOverview({ groups, students, coinEntries, lessons, transactions }) {
   const activeStudents = students.filter((s) => s.status === STUDENT_STATUS.ACTIVE)
@@ -57,15 +58,10 @@ export function getLessonProgress(group, lessons) {
   }
 }
 
-/** One student's coin growth across their group's lessons, in order — per-lesson coins
- * earned and `growthPercent`: how much this lesson's coins rose or fell versus the
- * previous lesson's (can be negative). Walks every lesson the group has held (not just
- * ones with entries) so lessons where the student earned 0 still show up as a flat step,
- * keeping the curve continuous.
- * The very first lesson has no prior lesson to compare against, so `growthPercent` is
- * null there; when the previous lesson was 0, a jump to any coins is treated as +100%
- * rather than an undefined division. */
-export function getStudentCoinGrowth(studentId, group, lessons, coinEntries) {
+/** One student's per-lesson coins on a fixed scale: 0 coins = 0%, the lesson maximum
+ * (`LESSON_MAX_COINS`) = 100%. Walks every lesson the group has held (not just ones with
+ * entries) so lessons where the student earned 0 still show up at the bottom of the chart. */
+export function getStudentLessonScores(studentId, group, lessons, coinEntries) {
   const groupLessons = [...lessons.filter((l) => l.groupId === group?.id)].sort((a, b) => a.lessonNumber - b.lessonNumber)
 
   const coinsByLesson = new Map()
@@ -73,17 +69,10 @@ export function getStudentCoinGrowth(studentId, group, lessons, coinEntries) {
     .filter((e) => e.studentId === studentId)
     .forEach((e) => coinsByLesson.set(e.lessonId, (coinsByLesson.get(e.lessonId) ?? 0) + e.value))
 
-  let previousCoins = null
   return groupLessons.map((lesson) => {
     const coins = coinsByLesson.get(lesson.id) ?? 0
-
-    let growthPercent = null
-    if (previousCoins !== null) {
-      growthPercent = previousCoins > 0 ? ((coins - previousCoins) / previousCoins) * 100 : coins > 0 ? 100 : 0
-    }
-    previousCoins = coins
-
-    return { lessonNumber: lesson.lessonNumber, date: lesson.date, coins, growthPercent }
+    const percent = Math.min(100, (coins / LESSON_MAX_COINS) * 100)
+    return { lessonNumber: lesson.lessonNumber, date: lesson.date, coins, percent }
   })
 }
 

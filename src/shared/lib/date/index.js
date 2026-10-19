@@ -60,6 +60,12 @@ export function formatUzMonthYear(year, monthIndex0) {
   return `${UZ_MONTHS[monthIndex0]} ${year}`
 }
 
+/** `"2026-10"` → `"Oktabr 2026"`. */
+export function formatMonthKey(monthKey) {
+  const [year, month] = monthKey.split('-').map(Number)
+  return formatUzMonthYear(year, month - 1)
+}
+
 export function getIsoWeekKey(isoString) {
   const date = new Date(isoString)
   const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
@@ -68,4 +74,10 @@ export function getIsoWeekKey(isoString) {
   const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4))
   const week = 1 + Math.round(((target - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7)
   return `${target.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+}
+
+/** "Shanba, 17-oktabr 2026" — weekday, day-month (lowercase) and year. */
+export function formatUzLongDate(isoString) {
+  const date = new Date(isoString)
+  return `${UZ_WEEKDAYS[date.getDay()]}, ${date.getDate()}-${UZ_MONTHS[date.getMonth()].toLowerCase()} ${date.getFullYear()}`
 }

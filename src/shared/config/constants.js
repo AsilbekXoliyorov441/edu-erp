@@ -39,12 +39,14 @@ export const TRANSACTION_TYPES = {
   COIN_BURNED: 'coin_burned',
 }
 
-/** Monthly coin goal ("oylik maqsad"): a student must collect at least `PERCENT`% of the
- * coins that were possible for them in a calendar month, otherwise that month's coins burn
+/** Monthly coin goal ("oylik maqsad"): a student who collects at least `PERCENT`% of the
+ * coins possible in a calendar month keeps all of them; above `HALF_PERCENT`% they keep
+ * half of that month's coins; at `HALF_PERCENT`% or below, that month's coins burn
  * when the month closes. Months before `START_MONTH` are never evaluated, so coins collected
  * earlier are never affected. Months are calendar months in Tashkent time (UTC+5). */
 export const MONTHLY_GOAL = {
   PERCENT: 70,
+  HALF_PERCENT: 50,
   START_MONTH: '2026-10',
   TZ_OFFSET_HOURS: 5,
   /** A month is closed only on day `CLOSE_GRACE_DAYS + 1` of the next month, so lessons
@@ -71,9 +73,32 @@ export const ROUTES = {
   SETTINGS: '/sozlamalar',
   TEACHERS_DASHBOARD: '/teachers-dashboard',
   TEACHERS_MANAGEMENT: '/ustozlar',
+  GAMES: '/oyinlar',
+  GAME: '/oyinlar/:gameId',
+  game: (id) => `/oyinlar/${id}`,
   TESTS: '/testlar',
   TEST_DETAIL: '/testlar/:testId',
   testDetail: (id) => `/testlar/${id}`,
   TAKE_TEST: '/testlar/:testId/yechish',
   takeTest: (id) => `/testlar/${id}/yechish`,
 }
+
+/** Live quiz games ("jonli o'yinlar"). Points per correct answer fall from `MAX_POINTS` to
+ * `MIN_POINTS` the longer the student takes; every correct answer in a row adds
+ * `STREAK_BONUS` more (capped at `MAX_STREAK_BONUS`). */
+export const GAME_RULES = {
+  MAX_POINTS: 1000,
+  MIN_POINTS: 500,
+  STREAK_BONUS: 100,
+  MAX_STREAK_BONUS: 500,
+  DURATIONS: [10, 20, 30, 45],
+  DEFAULT_DURATION: 20,
+  TEAM_COUNTS: [2, 3, 4],
+}
+
+export const GAME_TEAMS = [
+  { name: "Ko'k jamoa", color: '#3b82f6' },
+  { name: 'Qizil jamoa', color: '#ef4444' },
+  { name: 'Yashil jamoa', color: '#22c55e' },
+  { name: 'Sariq jamoa', color: '#f59e0b' },
+]

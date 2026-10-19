@@ -1,14 +1,15 @@
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts'
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { CalendarDays, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/ui/card'
 import { ChartTooltip } from '@/shared/ui/chart-tooltip'
 import { EmptyState } from '@/shared/ui/empty-state'
-import { getLessonProgress, getStudentCoinGrowth } from '@/shared/lib/stats'
+import { getLessonProgress, getStudentLessonScores } from '@/shared/lib/stats'
+import { LESSON_MAX_COINS } from '@/shared/lib/stats/monthlyGoal'
 import { formatUzDate } from '@/shared/lib/date'
 
 export function StudentLessonProgress({ studentId, group, lessons, coinEntries }) {
   const progress = getLessonProgress(group, lessons)
-  const growth = getStudentCoinGrowth(studentId, group, lessons, coinEntries).map((point) => ({
+  const scores = getStudentLessonScores(studentId, group, lessons, coinEntries).map((point) => ({
     ...point,
     label: `${point.lessonNumber}-dars`,
   }))
@@ -19,7 +20,7 @@ export function StudentLessonProgress({ studentId, group, lessons, coinEntries }
         <CardTitle className="flex items-center gap-2 text-base">
           <BookOpen className="size-4 text-primary" /> Darslik progressi
         </CardTitle>
-        <CardDescription>O'tgan darsga nisbatan coin o'sishi yoki pasayishi, foizda</CardDescription>
+        <CardDescription>Har darsda olingan coin, dars maksimumiga nisbatan foizda</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
         {progress.totalLessons === 0 ? (
@@ -43,7 +44,7 @@ export function StudentLessonProgress({ studentId, group, lessons, coinEntries }
 
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={growth} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                <LineChart data={scores} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke="var(--border)" />
                   <XAxis
                     dataKey="label"
@@ -56,29 +57,34 @@ export function StudentLessonProgress({ studentId, group, lessons, coinEntries }
                     tickLine={false}
                     axisLine={false}
                     tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                    width={40}
+                    width={44}
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    allowDataOverflow
                     tickFormatter={(v) => `${v}%`}
                   />
-                  <ReferenceLine y={0} stroke="var(--muted-foreground)" />
                   <Tooltip
-                    content={<ChartTooltip formatter={(v) => (v === null ? "ma'lumot yo'q" : `${v > 0 ? '+' : ''}${Math.round(v)}%`)} />}
+                    content={
+                      <ChartTooltip
+                        formatter={(v) => `${Math.round(v)}% (${Math.round((v / 100) * LESSON_MAX_COINS)}/${LESSON_MAX_COINS} coin)`}
+                      />
+                    }
                     cursor={{ stroke: 'var(--border)' }}
                   />
                   <Line
                     type="monotone"
-                    dataKey="growthPercent"
-                    name="O'zgarish"
+                    dataKey="percent"
+                    name="Natija"
                     stroke="var(--primary)"
                     strokeWidth={2}
                     dot={{ r: 3, fill: 'var(--primary)', strokeWidth: 0 }}
                     activeDot={{ r: 5 }}
-                    connectNulls
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
             <p className="text-xs text-muted-foreground">
-              Har bir nuqta shu darsda olingan coinning oldingi darsga nisbatan necha foizga ko'tarilgani yoki tushganini ko'rsatadi
+              Har bir nuqta shu darsda olingan coinni ko'rsatadi: 0% — 0 coin, 100% — dars maksimumi ({LESSON_MAX_COINS} coin)
             </p>
           </>
         )}

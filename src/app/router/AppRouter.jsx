@@ -21,6 +21,8 @@ import { TeachersManagementPage } from '@/pages/TeachersManagementPage/TeachersM
 import { TestsPage } from '@/pages/TestsPage/TestsPage'
 import { TestDetailPage } from '@/pages/TestDetailPage/TestDetailPage'
 import { TakeTestPage } from '@/pages/TakeTestPage/TakeTestPage'
+import { GamesPage } from '@/pages/GamesPage/GamesPage'
+import { GamePage } from '@/pages/GamePage/GamePage'
 import { NotFoundPage } from '@/pages/NotFoundPage/NotFoundPage'
 
 export function AppRouter() {
@@ -90,6 +92,8 @@ export function AppRouter() {
             }
           />
           <Route path="testlar" element={<TestsPage />} />
+          <Route path="oyinlar" element={<GamesPage />} />
+          <Route path="oyinlar/:gameId" element={<GamePage />} />
           <Route
             path="testlar/:testId"
             element={

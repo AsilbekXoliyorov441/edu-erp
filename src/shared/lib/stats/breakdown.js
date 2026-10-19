@@ -23,18 +23,3 @@ export function getWeeklyBreakdown(studentId, coinEntries) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([week, total]) => ({ week, total }))
 }
-
-export function getMonthlyBreakdown(studentId, coinEntries, lessons) {
-  const lessonMonthById = new Map(lessons.map((l) => [l.id, l.monthIndex]))
-  const byMonth = new Map()
-  coinEntries
-    .filter((e) => e.studentId === studentId)
-    .forEach((e) => {
-      const monthIndex = lessonMonthById.get(e.lessonId)
-      if (!monthIndex) return
-      byMonth.set(monthIndex, (byMonth.get(monthIndex) ?? 0) + e.value)
-    })
-  return [...byMonth.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([monthIndex, total]) => ({ monthIndex, total }))
-}

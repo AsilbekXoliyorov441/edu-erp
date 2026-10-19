@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, ListChecks, Users2 } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
@@ -21,6 +21,7 @@ import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
 import { useAttendanceStore } from '@/entities/attendance/model/store'
 import { useTransactionStore } from '@/entities/transaction/model/store'
 import { useTestsForGroup } from '@/entities/test-assignment/model/store'
+import { useBreadcrumbStore } from '@/shared/lib/store/breadcrumbStore'
 import { getGroupStats } from '@/shared/lib/stats'
 import { getMonthFromLessonNumber } from '@/shared/lib/date'
 import { ROUTES, STUDENT_STATUS } from '@/shared/config/constants'
@@ -76,7 +77,19 @@ export function GroupDetailPage() {
   const transactions = useTransactionStore((s) => s.items)
   const attendance = useAttendanceStore((s) => s.items)
 
+  const setTrail = useBreadcrumbStore((s) => s.setTrail)
+
   const group = groups.find((g) => g.id === groupId)
+  const groupLessons = lessons.filter((l) => l.groupId === group?.id)
+  // Based on the highest existing lesson number, not the count — deleting lessons
+  // leaves gaps, and count-based numbering would collide with a surviving lesson.
+  const nextLessonNumber = groupLessons.length ? Math.max(...groupLessons.map((l) => l.lessonNumber)) + 1 : 1
+
+  const groupName = group?.name
+  useEffect(() => {
+    setTrail(groupName ? [groupName, ...(sessionActive ? [`${nextLessonNumber}-dars baholash`] : [])] : null)
+  }, [setTrail, groupName, sessionActive, nextLessonNumber])
+  useEffect(() => () => setTrail(null), [setTrail])
 
   if (!group) {
     return (
@@ -94,12 +107,28 @@ export function GroupDetailPage() {
   }
 
   const groupStudents = students.filter((s) => s.groupId === group.id && s.status === STUDENT_STATUS.ACTIVE)
-  const groupLessons = lessons.filter((l) => l.groupId === group.id)
-  // Based on the highest existing lesson number, not the count — deleting lessons
-  // leaves gaps, and count-based numbering would collide with a surviving lesson.
-  const nextLessonNumber = groupLessons.length ? Math.max(...groupLessons.map((l) => l.lessonNumber)) + 1 : 1
   const monthIndex = getMonthFromLessonNumber(nextLessonNumber)
   const stats = getGroupStats(group, students, lessons, coinEntries)
+
+  const closeSession = () => {
+    setSessionActive(false)
+    setLessonDate(null)
+  }
+
+  if (sessionActive) {
+    return (
+      <LessonSessionPanel
+        group={group}
+        students={groupStudents}
+        stats={stats}
+        nextLessonNumber={nextLessonNumber}
+        monthIndex={monthIndex}
+        date={lessonDate}
+        onDone={closeSession}
+        onCancel={closeSession}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -122,71 +151,51 @@ export function GroupDetailPage() {
             </div>
           </div>
         </div>
-        {!sessionActive && (
-          <div className="flex flex-wrap items-center gap-2">
-            <AddStudentDialog group={group} />
-            <StartLessonDialog
-              disabled={groupStudents.length === 0}
-              onStart={(date) => {
-                setLessonDate(date)
-                setSessionActive(true)
-              }}
-            />
-            <DeleteGroupDialog group={group} redirectAfter />
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <AddStudentDialog group={group} />
+          <StartLessonDialog
+            disabled={groupStudents.length === 0}
+            onStart={(date) => {
+              setLessonDate(date)
+              setSessionActive(true)
+            }}
+          />
+          <DeleteGroupDialog group={group} redirectAfter />
+        </div>
       </div>
 
-      {sessionActive ? (
-        <LessonSessionPanel
-          group={group}
-          students={groupStudents}
-          nextLessonNumber={nextLessonNumber}
-          monthIndex={monthIndex}
-          date={lessonDate}
-          onDone={() => {
-            setSessionActive(false)
-            setLessonDate(null)
-          }}
-          onCancel={() => {
-            setSessionActive(false)
-            setLessonDate(null)
-          }}
-        />
-      ) : (
-        <Tabs defaultValue="students">
-          <TabsList>
-            <TabsTrigger value="students">O'quvchilar</TabsTrigger>
-            <TabsTrigger value="lessons">Darslar</TabsTrigger>
-            <TabsTrigger value="attendance">Davomat</TabsTrigger>
-            <TabsTrigger value="tests">Testlar</TabsTrigger>
-          </TabsList>
-          <TabsContent value="students">
-            <Card>
-              <CardContent className="p-5">
-                <StudentRosterTable students={groupStudents} transactions={transactions} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="lessons">
-            <Card>
-              <CardContent className="p-5">
-                <LessonsList lessons={groupLessons} coinEntries={coinEntries} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="attendance">
-            <Card>
-              <CardContent className="p-5">
-                <AttendanceHistory lessons={groupLessons} attendance={attendance} students={groupStudents} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="tests">
-            <GroupTestsTab groupId={group.id} />
-          </TabsContent>
-        </Tabs>
-      )}
+      <Tabs defaultValue="students">
+        <TabsList>
+          <TabsTrigger value="students">O'quvchilar</TabsTrigger>
+          <TabsTrigger value="lessons">Darslar</TabsTrigger>
+          <TabsTrigger value="attendance">Davomat</TabsTrigger>
+          <TabsTrigger value="tests">Testlar</TabsTrigger>
+        </TabsList>
+        <TabsContent value="students">
+          <Card>
+            <CardContent className="p-5">
+              <StudentRosterTable students={groupStudents} transactions={transactions} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="lessons">
+          <Card>
+            <CardContent className="p-5">
+              <LessonsList lessons={groupLessons} coinEntries={coinEntries} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="attendance">
+          <Card>
+            <CardContent className="p-5">
+              <AttendanceHistory lessons={groupLessons} attendance={attendance} students={groupStudents} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="tests">
+          <GroupTestsTab groupId={group.id} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

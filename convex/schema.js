@@ -121,6 +121,52 @@ export default defineSchema({
     .index('by_student', ['studentId'])
     .index('by_month', ['month']),
 
+  /** A live, in-class quiz game ("jonli o'yin") a teacher hosts for one group from one of
+   * their test topics. Everyone sees the same question at the same time: the host moves the
+   * game `lobby → question → reveal → question … → finished`. `questionIds` freezes the
+   * question order when the game is created. */
+  games: defineTable({
+    groupId: v.id('groups'),
+    testId: v.id('tests'),
+    hostId: v.id('teachers'),
+    title: v.string(),
+    mode: v.union(v.literal('solo'), v.literal('team')),
+    teamCount: v.number(),
+    questionIds: v.array(v.id('testQuestions')),
+    durationSec: v.number(),
+    status: v.union(v.literal('lobby'), v.literal('question'), v.literal('reveal'), v.literal('finished')),
+    currentIndex: v.number(),
+    questionStartedAt: v.number(),
+    createdAt: v.number(),
+    endedAt: v.optional(v.number()),
+  })
+    .index('by_group', ['groupId'])
+    .index('by_host', ['hostId']),
+
+  gamePlayers: defineTable({
+    gameId: v.id('games'),
+    studentId: v.id('students'),
+    team: v.number(),
+    score: v.number(),
+    streak: v.number(),
+    correctCount: v.number(),
+    joinedAt: v.number(),
+  })
+    .index('by_game', ['gameId'])
+    .index('by_game_student', ['gameId', 'studentId']),
+
+  gameAnswers: defineTable({
+    gameId: v.id('games'),
+    playerId: v.id('gamePlayers'),
+    questionIndex: v.number(),
+    selectedIndex: v.number(),
+    correct: v.boolean(),
+    points: v.number(),
+    elapsedMs: v.number(),
+  })
+    .index('by_game_question', ['gameId', 'questionIndex'])
+    .index('by_player', ['playerId']),
+
   gifts: defineTable({
     name: v.string(),
     icon: v.optional(v.string()),

@@ -1,9 +1,26 @@
 import { NavLink } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Coins } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { useAuthStore } from '@/entities/session/model/store'
 import { NAV_ITEMS } from '@/widgets/Sidebar/navItems'
+
+function LogoMark() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4" />
+    </svg>
+  )
+}
 
 export function Sidebar() {
   const role = useAuthStore((s) => s.role)
@@ -11,18 +28,18 @@ export function Sidebar() {
   const items = NAV_ITEMS.filter((item) => item.roles.includes(role) && (!item.superAdminOnly || isSuperAdmin))
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border/60 bg-card/40 backdrop-blur-xl lg:flex">
-      <div className="flex items-center gap-2.5 px-6 py-6">
-        <div className="flex size-10 items-center justify-center rounded-2xl bg-linear-to-br from-primary to-primary-hover text-primary-foreground shadow-sm">
-          <Coins className="size-5" />
+    <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col gap-[24px] border-r border-[var(--cs-border)] bg-[var(--cs-surface)] px-[14px] py-[20px] lg:flex">
+      <div className="flex items-center gap-[12px] px-[8px] py-[4px]">
+        <div className="flex size-[40px] shrink-0 items-center justify-center rounded-[12px] bg-[var(--cs-accent)] text-white">
+          <LogoMark />
         </div>
         <div>
-          <p className="text-sm font-semibold leading-tight text-foreground">Coin System</p>
-          <p className="text-xs text-muted-foreground">PDP Frontend</p>
+          <p className="text-[15px] leading-tight font-bold text-[var(--cs-text)]">Coin System</p>
+          <p className="text-[12.5px] text-[var(--cs-muted)]">PDP Frontend</p>
         </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 px-3">
+      <nav className="flex flex-col gap-[2px]">
         {items.map((item) => (
           <NavLink
             key={item.to}
@@ -30,29 +47,20 @@ export function Sidebar() {
             end={item.to === '/'}
             className={({ isActive }) =>
               cn(
-                'group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors',
-                isActive ? 'text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                'cs-focus flex h-[44px] items-center gap-[12px] rounded-[10px] px-[12px] text-[14.5px] transition-colors',
+                isActive
+                  ? 'bg-[var(--cs-accent-soft)] font-bold text-[var(--cs-accent-dark)]'
+                  : 'font-medium text-[var(--cs-text-3)] hover:bg-[var(--cs-hover)]',
               )
             }
           >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <motion.span
-                    layoutId="sidebar-active"
-                    className="absolute inset-0 rounded-xl bg-secondary"
-                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-                  />
-                )}
-                <item.icon className="relative z-10 size-4" />
-                <span className="relative z-10">{item.label}</span>
-              </>
-            )}
+            <item.icon size={18} strokeWidth={2} className="shrink-0" />
+            <span className="truncate">{item.label}</span>
           </NavLink>
         ))}
       </nav>
 
-      <div className="px-6 py-5 text-xs text-muted-foreground/70">© {new Date().getFullYear()} Coin System</div>
+      <div className="mt-auto p-[8px] text-[12px] text-[var(--cs-muted)]">© {new Date().getFullYear()} Coin System</div>
     </aside>
   )
 }

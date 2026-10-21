@@ -85,7 +85,7 @@ export const ROUTES = {
 
 /** Live quiz games ("jonli o'yinlar"). Points per correct answer fall from `MAX_POINTS` to
  * `MIN_POINTS` the longer the student takes; every correct answer in a row adds
- * `STREAK_BONUS` more (capped at `MAX_STREAK_BONUS`). */
+ * `STREAK_BONUS` more (capped at `MAX_STREAK_BONUS`). The last question counts double. */
 export const GAME_RULES = {
   MAX_POINTS: 1000,
   MIN_POINTS: 500,
@@ -93,6 +93,8 @@ export const GAME_RULES = {
   MAX_STREAK_BONUS: 500,
   DURATIONS: [10, 20, 30, 45],
   DEFAULT_DURATION: 20,
+  /** "3, 2, 1…" before every question. */
+  LEAD_IN_SEC: 3,
   TEAM_COUNTS: [2, 3, 4],
 }
 
@@ -101,4 +103,25 @@ export const GAME_TEAMS = [
   { name: 'Qizil jamoa', color: '#ef4444' },
   { name: 'Yashil jamoa', color: '#22c55e' },
   { name: 'Sariq jamoa', color: '#f59e0b' },
+]
+
+/** Heroes a player picks when joining a live game — each one taken by at most one player per
+ * game (while free ones remain). Emoji + gradient, so there are no image assets to ship. */
+export const GAME_HEROES = [
+  { id: 'lion', emoji: '🦁', name: 'Sher', from: '#f59e0b', to: '#ea580c' },
+  { id: 'tiger', emoji: '🐯', name: "Yo'lbars", from: '#fb923c', to: '#dc2626' },
+  { id: 'fox', emoji: '🦊', name: 'Tulki', from: '#f97316', to: '#b45309' },
+  { id: 'wolf', emoji: '🐺', name: "Bo'ri", from: '#64748b', to: '#1e293b' },
+  { id: 'panda', emoji: '🐼', name: 'Panda', from: '#a3a3a3', to: '#262626' },
+  { id: 'unicorn', emoji: '🦄', name: 'Yagonashox', from: '#f0abfc', to: '#a855f7' },
+  { id: 'dragon', emoji: '🐉', name: 'Ajdar', from: '#22c55e', to: '#047857' },
+  { id: 'eagle', emoji: '🦅', name: 'Burgut', from: '#a16207', to: '#422006' },
+  { id: 'owl', emoji: '🦉', name: "Boyo'g'li", from: '#a78bfa', to: '#5b21b6' },
+  { id: 'shark', emoji: '🦈', name: 'Akula', from: '#38bdf8', to: '#1d4ed8' },
+  { id: 'dino', emoji: '🦖', name: 'Dinozavr', from: '#84cc16', to: '#3f6212' },
+  { id: 'octopus', emoji: '🐙', name: 'Sakkizoyoq', from: '#f472b6', to: '#be123c' },
+  { id: 'robot', emoji: '🤖', name: 'Robot', from: '#94a3b8', to: '#3b82f6' },
+  { id: 'ninja', emoji: '🥷', name: 'Ninja', from: '#475569', to: '#020617' },
+  { id: 'wizard', emoji: '🧙', name: 'Sehrgar', from: '#818cf8', to: '#3730a3' },
+  { id: 'rocket', emoji: '🚀', name: 'Raketa', from: '#60a5fa', to: '#7c3aed' },
 ]

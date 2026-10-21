@@ -15,6 +15,7 @@ import { useActiveGameForMe, useGameActions, useTeacherGames } from '@/entities/
 import { GAME_RULES, ROLES, ROUTES } from '@/shared/config/constants'
 import { formatRelativeUz } from '@/shared/lib/date'
 import { cn } from '@/shared/lib/utils'
+import { GameStage } from '@/pages/GamePage/gameUi'
 
 const STATUS_LABEL = { lobby: 'Kutish zali', question: 'Davom etmoqda', reveal: 'Davom etmoqda', finished: 'Tugagan' }
 
@@ -71,7 +72,8 @@ function CreateGameCard() {
           <Gamepad2 className="size-5 text-blue-500" /> Yangi jonli o'yin
         </CardTitle>
         <CardDescription>
-          Mavzudagi savollar hamma o'quvchiga bir vaqtda chiqadi. Tez va to'g'ri javob — ko'proq ball.
+          Mavzudagi savollar hamma o'quvchiga bir vaqtda chiqadi. Tez va to'g'ri javob — ko'proq ball, ketma-ket
+          to'g'ri javoblarga bonus, oxirgi savol — 2× ball.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5 pt-0">
@@ -236,25 +238,36 @@ function StudentGames() {
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
-      <Card className="overflow-hidden border-0 bg-blue-500 text-white shadow-xl shadow-blue-500/25">
-        <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
-          <span className="flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
-            <span className="size-2 animate-pulse rounded-full bg-white" /> JONLI
+      <GameStage>
+        <div className="flex flex-col items-center gap-5 py-6 text-center">
+          <span className="flex items-center gap-1.5 rounded-md bg-rose-500 px-2 py-1 text-xs font-black tracking-wider">
+            <span className="size-1.5 animate-pulse rounded-full bg-white" /> LIVE
           </span>
+          <motion.div
+            animate={{ rotate: [0, -6, 6, 0] }}
+            transition={{ repeat: Infinity, duration: 2.4 }}
+            className="flex size-20 items-center justify-center rounded-3xl bg-white text-blue-600 shadow-2xl"
+          >
+            <Gamepad2 className="size-10" />
+          </motion.div>
           <div>
-            <h2 className="text-2xl font-extrabold">{active.title}</h2>
-            <p className="mt-1 text-sm text-white/80">
+            <h2 className="text-3xl font-black">{active.title}</h2>
+            <p className="mt-1 text-white/80">
               {active.mode === 'team' ? "Jamoaviy o'yin" : "Yakka o'yin"} •{' '}
               {active.status === 'lobby' ? 'boshlanishini kutmoqda' : 'davom etmoqda'}
             </p>
           </div>
-          <Button asChild size="lg" className="gap-2 bg-white text-blue-600 hover:bg-gray-100">
-            <Link to={ROUTES.game(active.id)}>
-              <Play className="size-5" /> O'yinga qo'shilish
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
+          <Link
+            to={ROUTES.game(active.id)}
+            className="flex h-14 items-center gap-2 rounded-2xl bg-white px-10 text-lg font-black text-blue-600 shadow-2xl transition-transform hover:scale-105"
+          >
+            <Play className="size-6 fill-current" /> O'yinga qo'shilish
+          </Link>
+          <p className="max-w-sm text-sm text-white/75">
+            Tez va to'g'ri javob — ko'proq ball. Ketma-ket to'g'ri javoblar uchun bonus, oxirgi savol esa 2× ball!
+          </p>
+        </div>
+      </GameStage>
     </motion.div>
   )
 }

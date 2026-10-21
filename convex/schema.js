@@ -150,6 +150,8 @@ export default defineSchema({
     score: v.number(),
     streak: v.number(),
     correctCount: v.number(),
+    /** `GAME_HEROES` id the student picked when joining. */
+    hero: v.optional(v.string()),
     joinedAt: v.number(),
   })
     .index('by_game', ['gameId'])

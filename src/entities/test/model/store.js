@@ -11,11 +11,13 @@ export function useTopics() {
   const createMutation = useMutation(api.tests.create)
   const updateMutation = useMutation(api.tests.update)
   const removeMutation = useMutation(api.tests.remove)
+  const importPresetsMutation = useMutation(api.tests.importPresets)
 
   return {
     items,
     create: (title) => createMutation({ token, title }),
     update: (id, title) => updateMutation({ token, id, title }),
     remove: (id) => removeMutation({ token, id }),
+    importPresets: () => importPresetsMutation({ token }),
   }
 }

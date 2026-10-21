@@ -1,6 +1,7 @@
 import { query, mutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
 import { getScope, requireTestOwner, getCenterTeacherIdSet } from './lib/scoping'
+import { PRESET_TESTS } from './lib/presetTests'
 
 function requireTeacherScope(scope) {
   if (scope.platformAdmin || scope.session.role !== 'teacher') throw new ConvexError("O'qituvchi huquqi talab qilinadi")
@@ -42,6 +43,34 @@ export const create = mutation({
     const scope = await getScope(ctx, token)
     requireTeacherScope(scope)
     return await ctx.db.insert('tests', { title, createdAt: new Date().toISOString(), teacherId: scope.session.userId })
+  },
+})
+
+/** Copies the ready-made HTML / CSS / HTML+CSS topics into the caller's question bank.
+ * Topics the caller already has (matched by title) are skipped, so it's safe to re-run. */
+export const importPresets = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const scope = await getScope(ctx, token)
+    requireTeacherScope(scope)
+    const teacherId = scope.session.userId
+
+    const existing = await ctx.db
+      .query('tests')
+      .withIndex('by_teacher', (q) => q.eq('teacherId', teacherId))
+      .collect()
+    const existingTitles = new Set(existing.map((t) => t.title))
+
+    let added = 0
+    for (const preset of PRESET_TESTS) {
+      if (existingTitles.has(preset.title)) continue
+      const testId = await ctx.db.insert('tests', { title: preset.title, createdAt: new Date().toISOString(), teacherId })
+      for (const [index, question] of preset.questions.entries()) {
+        await ctx.db.insert('testQuestions', { testId, ...question, order: index + 1 })
+      }
+      added += 1
+    }
+    return { added }
   },
 })
 

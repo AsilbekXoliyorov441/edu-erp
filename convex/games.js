@@ -2,18 +2,27 @@ import { query, mutation, internalMutation } from './_generated/server'
 import { internal } from './_generated/api'
 import { v, ConvexError } from 'convex/values'
 import { getScope, getScopedGroupIdSet, requireGroupOwner, requireTestOwner } from './lib/scoping'
-import { GAME_RULES } from '../src/shared/config/constants'
+import { GAME_HEROES, GAME_RULES } from '../src/shared/config/constants'
 
 /** Extra time accepted after the countdown ends, for network latency. */
 const ANSWER_GRACE_MS = 2000
 
+/** "3, 2, 1…" before every question: `questionStartedAt` is set this far in the future, and
+ * answers are only accepted from then on. */
+const LEAD_IN_MS = GAME_RULES.LEAD_IN_SEC * 1000
+
+function isFinalQuestion(game, index) {
+  return index === game.questionIds.length - 1 && game.questionIds.length > 1
+}
+
 /** Points for one answer: faster → more (MAX..MIN), plus a bonus for the streak of correct
- * answers the player already had going into this question. */
-function scoreAnswer({ correct, elapsedMs, durationSec, streakBefore }) {
+ * answers the player already had going into this question. The last question counts double. */
+function scoreAnswer({ correct, elapsedMs, durationSec, streakBefore, final }) {
   if (!correct) return 0
   const ratio = Math.min(1, Math.max(0, elapsedMs / (durationSec * 1000)))
   const base = Math.round(GAME_RULES.MAX_POINTS - (GAME_RULES.MAX_POINTS - GAME_RULES.MIN_POINTS) * ratio)
-  return base + Math.min(streakBefore * GAME_RULES.STREAK_BONUS, GAME_RULES.MAX_STREAK_BONUS)
+  const points = base + Math.min(streakBefore * GAME_RULES.STREAK_BONUS, GAME_RULES.MAX_STREAK_BONUS)
+  return final ? points * 2 : points
 }
 
 async function getGameOrThrow(ctx, gameId) {
@@ -66,9 +75,9 @@ async function getAnswersFor(ctx, gameId, questionIndex) {
 }
 
 async function openQuestion(ctx, game, index) {
-  const startedAt = Date.now()
+  const startedAt = Date.now() + LEAD_IN_MS
   await ctx.db.patch(game._id, { status: 'question', currentIndex: index, questionStartedAt: startedAt })
-  await ctx.scheduler.runAfter(game.durationSec * 1000 + ANSWER_GRACE_MS, internal.games.autoReveal, {
+  await ctx.scheduler.runAfter(LEAD_IN_MS + game.durationSec * 1000 + ANSWER_GRACE_MS, internal.games.autoReveal, {
     gameId: game._id,
     questionIndex: index,
   })
@@ -178,22 +187,30 @@ export const autoReveal = internalMutation({
   },
 })
 
-/** Student: join (or re-join) a game of their own group. In team mode the student goes to
- * the team with the fewest members so teams stay balanced. */
+/** Student: join (or re-join) a game of their own group with a hero. In team mode the
+ * student goes to the team with the fewest members so teams stay balanced. Re-joining while
+ * the game is still in the lobby swaps the hero. A hero belongs to one player per game —
+ * unless every hero is already taken (more players than heroes). */
 export const join = mutation({
-  args: { token: v.string(), gameId: v.id('games') },
-  handler: async (ctx, { token, gameId }) => {
+  args: { token: v.string(), gameId: v.id('games'), hero: v.string() },
+  handler: async (ctx, { token, gameId, hero }) => {
     const game = await getGameOrThrow(ctx, gameId)
     const student = await requireGameStudent(ctx, token, game)
     if (game.status === 'finished') throw new ConvexError("O'yin tugagan")
-
-    const existing = await ctx.db
-      .query('gamePlayers')
-      .withIndex('by_game_student', (q) => q.eq('gameId', gameId).eq('studentId', student._id))
-      .unique()
-    if (existing) return existing._id
+    if (!GAME_HEROES.some((h) => h.id === hero)) throw new ConvexError('Bunday qahramon yo\'q')
 
     const players = await getPlayers(ctx, gameId)
+    const existing = players.find((p) => p.studentId === student._id)
+    const takenByOthers = new Set(players.filter((p) => p !== existing && p.hero).map((p) => p.hero))
+    if (takenByOthers.has(hero) && takenByOthers.size < GAME_HEROES.length) {
+      throw new ConvexError('Bu qahramonni boshqa o\'quvchi tanladi — boshqasini tanlang')
+    }
+
+    if (existing) {
+      if (existing.hero !== hero && (game.status === 'lobby' || !existing.hero)) await ctx.db.patch(existing._id, { hero })
+      return existing._id
+    }
+
     const sizes = Array.from({ length: game.teamCount }, (_, team) => players.filter((p) => p.team === team).length)
     const team = sizes.indexOf(Math.min(...sizes))
 
@@ -204,6 +221,7 @@ export const join = mutation({
       score: 0,
       streak: 0,
       correctCount: 0,
+      hero,
       joinedAt: Date.now(),
     })
   },
@@ -220,6 +238,7 @@ export const answer = mutation({
     if (game.status !== 'question' || game.currentIndex !== questionIndex) throw new ConvexError('Bu savol yopilgan')
 
     const elapsedMs = Date.now() - game.questionStartedAt
+    if (elapsedMs < -500) throw new ConvexError('Savol hali boshlanmadi')
     if (elapsedMs > game.durationSec * 1000 + ANSWER_GRACE_MS) throw new ConvexError('Vaqt tugadi')
 
     const player = await ctx.db
@@ -234,7 +253,13 @@ export const answer = mutation({
     const question = await ctx.db.get(game.questionIds[questionIndex])
     if (!question) throw new ConvexError('Savol topilmadi')
     const correct = selectedIndex === question.correctIndex
-    const points = scoreAnswer({ correct, elapsedMs, durationSec: game.durationSec, streakBefore: player.streak })
+    const points = scoreAnswer({
+      correct,
+      elapsedMs: Math.max(0, elapsedMs),
+      durationSec: game.durationSec,
+      streakBefore: player.streak,
+      final: isFinalQuestion(game, questionIndex),
+    })
 
     await ctx.db.insert('gameAnswers', {
       gameId,
@@ -243,7 +268,7 @@ export const answer = mutation({
       selectedIndex,
       correct,
       points,
-      elapsedMs,
+      elapsedMs: Math.max(0, elapsedMs),
     })
     await ctx.db.patch(player._id, {
       score: player.score + points,
@@ -278,6 +303,8 @@ export const getState = query({
         studentId: p.studentId,
         fullName: students[i]?.fullName ?? "O'quvchi",
         team: p.team,
+        hero: p.hero ?? null,
+        joinedAt: p.joinedAt,
         score: p.score,
         streak: p.streak,
         correctCount: p.correctCount,
@@ -286,6 +313,15 @@ export const getState = query({
       }))
       .sort((a, b) => b.score - a.score || a.fullName.localeCompare(b.fullName))
       .map((p, i) => ({ ...p, rank: i + 1 }))
+
+    // Rank before this question's points, so the reveal can show who climbed (↑2) or fell.
+    if (game.status === 'reveal') {
+      const before = [...leaderboard].sort(
+        (a, b) => b.score - b.lastPoints - (a.score - a.lastPoints) || a.fullName.localeCompare(b.fullName),
+      )
+      const prevRankById = new Map(before.map((p, i) => [p.playerId, i + 1]))
+      leaderboard.forEach((p) => (p.prevRank = prevRankById.get(p.playerId)))
+    }
 
     const teams =
       game.mode === 'team'
@@ -309,6 +345,16 @@ export const getState = query({
           correctIndex: revealed ? q.correctIndex : null,
           distribution: revealed ? q.options.map((_, i) => answers.filter((a) => a.selectedIndex === i).length) : null,
         }
+      }
+    }
+
+    // Quickest correct answer of the revealed question — a small "Eng tez" shout-out.
+    let fastest = null
+    if (game.status === 'reveal') {
+      const best = answers.filter((a) => a.correct).sort((a, b) => a.elapsedMs - b.elapsedMs)[0]
+      if (best) {
+        const p = leaderboard.find((x) => x.playerId === best.playerId)
+        fastest = { fullName: p?.fullName ?? '', seconds: Math.round(best.elapsedMs / 100) / 10 }
       }
     }
 
@@ -341,6 +387,9 @@ export const getState = query({
       totalQuestions: game.questionIds.length,
       durationSec: game.durationSec,
       questionStartedAt: game.questionStartedAt,
+      isFinalQuestion: isFinalQuestion(game, game.currentIndex),
+      correctCount: revealed ? answers.filter((a) => a.correct).length : null,
+      fastest,
       viewerRole: viewer.role,
       question,
       answeredCount: answers.length,
@@ -349,6 +398,13 @@ export const getState = query({
       me,
     }
   },
+})
+
+/** The server's clock, so screens can line their countdowns up with it (Convex queries
+ * can't be used for this — their results are cached). */
+export const serverTime = mutation({
+  args: {},
+  handler: async () => Date.now(),
 })
 
 /** Student: the unfinished game of their own group, if any — drives the "join" banner. */

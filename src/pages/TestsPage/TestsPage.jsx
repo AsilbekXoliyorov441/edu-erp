@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ListChecks, Plus, ChevronRight, Users2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { ListChecks, Plus, ChevronRight, Users2, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
@@ -14,7 +16,21 @@ import { useMyAttempts } from '@/entities/quiz/model/store'
 import { ROLES, ROUTES } from '@/shared/config/constants'
 
 function TeacherTestsPage() {
-  const { items: topics } = useTopics()
+  const { items: topics, importPresets } = useTopics()
+  const [importing, setImporting] = useState(false)
+
+  const handleImportPresets = async () => {
+    setImporting(true)
+    try {
+      const { added } = await importPresets()
+      if (added > 0) toast.success(`${added} ta tayyor mavzu qo'shildi`)
+      else toast.info("Tayyor mavzular allaqachon qo'shilgan")
+    } catch (error) {
+      toast.error(error?.data ?? 'Xatolik yuz berdi')
+    } finally {
+      setImporting(false)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -25,13 +41,18 @@ function TeacherTestsPage() {
             Mavzu yarating, unga savollar qo'shing va xohlagan guruhlaringizga ulang.
           </p>
         </div>
-        <TestFormDialog
-          trigger={
-            <Button className="gap-1.5">
-              <Plus className="size-4" /> Mavzu qo'shish
-            </Button>
-          }
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" className="gap-1.5" onClick={handleImportPresets} disabled={importing}>
+            <Sparkles className="size-4" /> Tayyor testlar (HTML, CSS)
+          </Button>
+          <TestFormDialog
+            trigger={
+              <Button className="gap-1.5">
+                <Plus className="size-4" /> Mavzu qo'shish
+              </Button>
+            }
+          />
+        </div>
       </div>
 
       {topics.length === 0 ? (

@@ -21,6 +21,7 @@ import type * as groups from "../groups.js";
 import type * as lessons from "../lessons.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_passwords from "../lib/passwords.js";
+import type * as lib_presetTests from "../lib/presetTests.js";
 import type * as lib_scoping from "../lib/scoping.js";
 import type * as migrations from "../migrations.js";
 import type * as monthlyGoal from "../monthlyGoal.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   lessons: typeof lessons;
   "lib/authz": typeof lib_authz;
   "lib/passwords": typeof lib_passwords;
+  "lib/presetTests": typeof lib_presetTests;
   "lib/scoping": typeof lib_scoping;
   migrations: typeof migrations;
   monthlyGoal: typeof monthlyGoal;

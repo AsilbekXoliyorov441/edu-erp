@@ -8,7 +8,7 @@ export function useCenterStore(selector) {
   const token = useAuthStore((s) => s.token)
   const role = useAuthStore((s) => s.role)
   const canQuery = role === ROLES.PLATFORM_ADMIN && !!token
-
+ 
   const items = (useQuery(api.centers.list, canQuery ? { token } : 'skip') ?? []).map(mapId)
 
   const createMutation = useMutation(api.centers.create)

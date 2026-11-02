@@ -3,6 +3,7 @@ import { api } from '@convex/_generated/api'
 import { convexClient } from '@/shared/lib/convex/client'
 
 const TOKEN_KEY = 'coin-system:token'
+const HYDRATE_TIMEOUT_MS = 10000
 
 function readToken() {
   try {
@@ -39,14 +40,27 @@ const LOGGED_OUT_FIELDS = {
 export const useAuthStore = create((set, get) => ({
   ...LOGGED_OUT_FIELDS,
   hydrated: false,
+  /** Set when the session check couldn't reach the server — the splash offers a retry
+   * instead of spinning forever. */
+  hydrateError: false,
 
   async hydrate() {
+    set({ hydrateError: false })
     const token = readToken()
     if (!token) {
       set({ hydrated: true })
       return
     }
-    const who = await convexClient.query(api.auth.whoAmI, { token })
+    let who
+    try {
+      who = await Promise.race([
+        convexClient.query(api.auth.whoAmI, { token }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), HYDRATE_TIMEOUT_MS)),
+      ])
+    } catch {
+      set({ hydrateError: true })
+      return
+    }
     if (!who) {
       writeToken(null)
       set({ hydrated: true })

@@ -1,7 +1,8 @@
 import { query, mutation } from './_generated/server'
-import { v } from 'convex/values'
+import { v, ConvexError } from 'convex/values'
 import { getScopedGroupIdSet, requireGroupOwner, requireLessonOwner } from './lib/scoping'
 import { COIN_CATEGORY_LIST, LESSONS_PER_MONTH } from '../src/shared/config/constants'
+import { getDayKey } from '../src/shared/lib/stats/monthlyGoal.js'
 
 const CATEGORY_MAX = Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, c.max]))
 
@@ -34,6 +35,11 @@ export const saveSession = mutation({
       .query('lessons')
       .withIndex('by_group', (q) => q.eq('groupId', groupId))
       .collect()
+    // One lesson per group per day: re-grading an already graded day would double its coins.
+    const dayKey = getDayKey(date)
+    if (groupLessons.some((l) => getDayKey(l.date) === dayKey)) {
+      throw new ConvexError("Bu sana uchun dars allaqachon baholangan. Boshqa kunni tanlang.")
+    }
     const lessonNumber = groupLessons.length ? Math.max(...groupLessons.map((l) => l.lessonNumber)) + 1 : 1
     const monthIndex = Math.ceil(lessonNumber / LESSONS_PER_MONTH)
     const lessonId = await ctx.db.insert('lessons', { groupId, date, lessonNumber, monthIndex })

@@ -13,12 +13,15 @@ export const TENANT_ROLES = {
 
 /** Fixed coin categories and their per-lesson max value — enforced across every coin input. */
 export const COIN_CATEGORIES = {
+  savol_javob: { key: 'savol_javob', label: 'Savol-javob', max: 5 },
   uy_vazifasi: { key: 'uy_vazifasi', label: 'Uy vazifasi', max: 5 },
-  sinf_ishi: { key: 'sinf_ishi', label: 'Sinf ishi', max: 2 },
-  savol_javob: { key: 'savol_javob', label: "Savol-javob", max: 3 },
+  /** No longer graded — kept only so lessons graded before the change still show their label. */
+  sinf_ishi: { key: 'sinf_ishi', label: 'Sinf ishi', max: 2, retired: true },
 }
 
-export const COIN_CATEGORY_LIST = Object.values(COIN_CATEGORIES)
+/** Categories graded today (retired ones excluded) — the grading table, validation and the
+ * per-lesson maximum all come from this list. */
+export const COIN_CATEGORY_LIST = Object.values(COIN_CATEGORIES).filter((c) => !c.retired)
 
 export const LESSONS_PER_MONTH = 12
 

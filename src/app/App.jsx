@@ -10,13 +10,45 @@ import { TooltipProvider } from '@/shared/ui/tooltip'
 import { AppRouter } from '@/app/router/AppRouter'
 
 function SplashScreen() {
+  const hydrateError = useAuthStore((s) => s.hydrateError)
+  const retry = useAuthStore((s) => s.hydrate)
+  const logout = useAuthStore((s) => s.logout)
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-app-gradient bg-background">
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex size-14 animate-pulse items-center justify-center rounded-2xl bg-linear-to-br from-primary to-primary-hover text-primary-foreground shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-app-gradient bg-background px-6">
+      <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+        <div
+          className={`flex size-14 items-center justify-center rounded-2xl bg-linear-to-br from-primary to-primary-hover text-primary-foreground shadow-lg ${hydrateError ? '' : 'animate-pulse'}`}
+        >
           <Coins className="size-7" />
         </div>
-        <p className="text-sm text-muted-foreground">Yuklanmoqda...</p>
+        {hydrateError ? (
+          <>
+            <p className="font-semibold text-foreground">Serverga ulanib bo'lmadi</p>
+            <p className="text-sm text-muted-foreground">Internet aloqasini tekshiring va qayta urinib ko'ring.</p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={retry}
+                className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                Qayta urinish
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  logout()
+                  useAuthStore.setState({ hydrated: true, hydrateError: false })
+                }}
+                className="rounded-xl border border-border px-4 py-2 text-sm font-semibold text-foreground"
+              >
+                Qayta kirish
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Yuklanmoqda...</p>
+        )}
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Play } from 'lucide-react'
+import { CalendarCheck, Play } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -10,59 +10,76 @@ import {
   DialogTrigger,
 } from '@/shared/ui/dialog'
 import { Button } from '@/shared/ui/button'
-import { Input } from '@/shared/ui/input'
-import { Label } from '@/shared/ui/label'
+import { getDayKey } from '@/shared/lib/stats/monthlyGoal'
+import { formatDayKey } from '@/shared/lib/date'
+import { LessonCalendar } from '@/features/give-coin/ui/LessonCalendar'
 
-function todayDateInputValue() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-/** Turns a `yyyy-MM-dd` date-input value into a full ISO datetime — the calendar date the
- * teacher picked, combined with the current time-of-day so entries within the same day
- * still sort chronologically. */
-function toIsoWithCurrentTime(dateValue) {
-  const [year, month, day] = dateValue.split('-').map(Number)
+/** Turns a `yyyy-MM-dd` day into a full ISO datetime — the day the teacher picked, combined
+ * with the current time-of-day so entries within the same day still sort chronologically. */
+function toIsoWithCurrentTime(dayKey) {
+  const [year, month, day] = dayKey.split('-').map(Number)
   const now = new Date()
   return new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds()).toISOString()
 }
 
-export function StartLessonDialog({ onStart, disabled }) {
+/** Today if it hasn't been graded yet, otherwise nothing — the teacher picks a day. */
+function defaultDay(lessons) {
+  const today = getDayKey()
+  return lessons.some((l) => getDayKey(l.date) === today) ? null : today
+}
+
+export function StartLessonDialog({ onStart, disabled, lessons = [] }) {
   const [open, setOpen] = useState(false)
-  const [dateValue, setDateValue] = useState(todayDateInputValue)
+  const [day, setDay] = useState(null)
+  const gradedToday = lessons.some((l) => getDayKey(l.date) === getDayKey())
 
   const handleSubmit = (event) => {
     event.preventDefault()
-    onStart(toIsoWithCurrentTime(dateValue))
+    if (!day) return
+    onStart(toIsoWithCurrentTime(day))
     setOpen(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (next) setDateValue(todayDateInputValue()) }}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (next) setDay(defaultDay(lessons))
+      }}
+    >
       <DialogTrigger asChild>
         <Button disabled={disabled} className="gap-1.5">
           <Play className="size-4" /> Darsni boshlash
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Darsni boshlash</DialogTitle>
-            <DialogDescription>Dars qaysi sanaga tegishli ekanini tanlang.</DialogDescription>
+            <DialogDescription>
+              Qaysi kunning darsini baholaysiz? Baholangan kunlarni qayta tanlab bo'lmaydi.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5 py-4">
-            <Label htmlFor="lesson-date">Sana</Label>
-            <Input
-              id="lesson-date"
-              type="date"
-              value={dateValue}
-              onChange={(e) => setDateValue(e.target.value)}
-              required
-              autoFocus
-            />
+          <div className="py-4">
+            {gradedToday && !day && (
+              <p className="mb-3 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                <CalendarCheck className="size-4 shrink-0" /> Bugungi dars allaqachon baholangan.
+              </p>
+            )}
+            <LessonCalendar lessons={lessons} selected={day} onSelect={setDay} />
           </div>
-          <DialogFooter>
-            <Button type="submit" className="gap-1.5">
+          <DialogFooter className="items-center gap-3 sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {day ? (
+                <>
+                  Tanlangan: <b className="text-foreground">{formatDayKey(day)}</b>
+                </>
+              ) : (
+                'Kunni tanlang'
+              )}
+            </p>
+            <Button type="submit" disabled={!day} className="gap-1.5">
               <Play className="size-4" /> Boshlash
             </Button>
           </DialogFooter>

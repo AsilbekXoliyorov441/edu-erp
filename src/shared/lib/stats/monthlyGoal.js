@@ -18,6 +18,12 @@ export function getMonthKey(value = new Date()) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+/** `YYYY-MM-DD` calendar day of a timestamp, in Tashkent time — one lesson per group per day. */
+export function getDayKey(value = new Date()) {
+  const d = toTashkent(value)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+}
+
 export function getPreviousMonthKey(monthKey) {
   const [year, month] = monthKey.split('-').map(Number)
   return month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, '0')}`

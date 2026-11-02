@@ -144,8 +144,8 @@ export function LessonSessionPanel({ group, students, stats, nextLessonNumber, m
   const handleSave = async () => {
     try {
       await session.save()
-    } catch {
-      toast.error("Saqlab bo'lmadi. Qaytadan urinib ko'ring.")
+    } catch (err) {
+      toast.error(err?.data ?? "Saqlab bo'lmadi. Qaytadan urinib ko'ring.")
       return
     }
     onDone()

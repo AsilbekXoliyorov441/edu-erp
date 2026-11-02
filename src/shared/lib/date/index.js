@@ -81,3 +81,9 @@ export function formatUzLongDate(isoString) {
   const date = new Date(isoString)
   return `${UZ_WEEKDAYS[date.getDay()]}, ${date.getDate()}-${UZ_MONTHS[date.getMonth()].toLowerCase()} ${date.getFullYear()}`
 }
+
+/** `"2026-10-14"` → `"14-oktabr 2026"`. */
+export function formatDayKey(dayKey) {
+  const [year, month, day] = dayKey.split('-').map(Number)
+  return `${day}-${UZ_MONTHS[month - 1].toLowerCase()} ${year}`
+}

@@ -154,6 +154,7 @@ export function GroupDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <AddStudentDialog group={group} />
           <StartLessonDialog
+            lessons={groupLessons}
             disabled={groupStudents.length === 0}
             onStart={(date) => {
               setLessonDate(date)

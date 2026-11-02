@@ -6,7 +6,7 @@ import { cn } from '@/shared/lib/utils'
 
 /** One grid shared by the header and every row, so columns line up exactly. */
 const GRID =
-  'grid grid-cols-[28px_minmax(200px,1fr)_136px_236px_122px_160px_84px_44px] items-center gap-x-[12px]'
+  'grid grid-cols-[28px_minmax(200px,1fr)_136px_236px_236px_84px_44px] items-center gap-x-[12px]'
 
 const AVATAR_PALETTE = ['#A21CAF', '#BE185D', '#C2410C', '#0F766E', '#4338CA', '#7C3AED', '#0369A1', '#B45309', '#BE123C']
 

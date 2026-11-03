@@ -43,7 +43,7 @@ function TeacherTestsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" className="gap-1.5" onClick={handleImportPresets} disabled={importing}>
-            <Sparkles className="size-4" /> Tayyor testlar (HTML, CSS)
+            <Sparkles className="size-4" /> Tayyor testlar (HTML, CSS, Python)
           </Button>
           <TestFormDialog
             trigger={

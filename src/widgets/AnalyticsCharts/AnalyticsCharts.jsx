@@ -25,10 +25,12 @@ import { useStudentStore } from '@/entities/student/model/store'
 import { useLessonStore } from '@/entities/lesson/model/store'
 import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
 import { getCoinTrend, getGroupComparison, getCategoryDistribution, getLeaderboardByPeriod } from '@/shared/lib/stats'
+import { getMonthKey } from '@/shared/lib/stats/monthlyGoal'
+import { formatMonthKey } from '@/shared/lib/date'
 
 const CATEGORY_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)']
 
-function FilterBar({ groups, groupId, setGroupId, monthOptions, monthIndex, setMonthIndex }) {
+function FilterBar({ groups, groupId, setGroupId, monthOptions, month, setMonth }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Select value={groupId} onValueChange={setGroupId}>
@@ -45,15 +47,15 @@ function FilterBar({ groups, groupId, setGroupId, monthOptions, monthIndex, setM
         </SelectContent>
       </Select>
 
-      <Select value={monthIndex} onValueChange={setMonthIndex}>
-        <SelectTrigger className="w-36">
+      <Select value={month} onValueChange={setMonth}>
+        <SelectTrigger className="w-44">
           <SelectValue placeholder="Oy" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Barcha oylar</SelectItem>
           {monthOptions.map((m) => (
-            <SelectItem key={m} value={String(m)}>
-              {m}-oy
+            <SelectItem key={m} value={m}>
+              {formatMonthKey(m)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -69,42 +71,56 @@ export function AnalyticsCharts() {
   const coinEntries = useCoinEntryStore((s) => s.items)
 
   const [groupId, setGroupId] = useState('all')
-  const [monthIndex, setMonthIndex] = useState('all')
+  // Calendar months (Tashkent time); the dashboard opens on the current month so old
+  // lessons don't crowd the charts.
+  const currentMonth = getMonthKey()
+  const [month, setMonth] = useState(currentMonth)
 
-  const monthOptions = useMemo(() => [...new Set(lessons.map((l) => l.monthIndex))].sort((a, b) => a - b), [lessons])
+  const monthOptions = useMemo(
+    () => [...new Set([currentMonth, ...lessons.map((l) => getMonthKey(l.date))])].sort().reverse(),
+    [lessons, currentMonth],
+  )
 
   const scopedGroupId = groupId === 'all' ? undefined : groupId
-  const scopedMonth = monthIndex === 'all' ? undefined : Number(monthIndex)
+  const scopedMonth = month === 'all' ? undefined : month
 
-  const trend = useMemo(() => {
-    const points = getCoinTrend(lessons, coinEntries, { groupId: scopedGroupId })
-    return points
-      .filter((p) => (scopedMonth ? p.monthIndex === scopedMonth : true))
-      .map((p) => ({ ...p, label: `${p.lessonNumber}-dars` }))
-  }, [lessons, coinEntries, scopedGroupId, scopedMonth])
+  // Lessons of the chosen period (all groups) — for comparing groups.
+  const periodLessons = useMemo(
+    () => (scopedMonth ? lessons.filter((l) => getMonthKey(l.date) === scopedMonth) : lessons),
+    [lessons, scopedMonth],
+  )
+  // …narrowed to the chosen group — for every other chart.
+  const scopedLessons = useMemo(
+    () => (scopedGroupId ? periodLessons.filter((l) => l.groupId === scopedGroupId) : periodLessons),
+    [periodLessons, scopedGroupId],
+  )
+  const scopedEntries = useMemo(() => {
+    const ids = new Set(scopedLessons.map((l) => l.id))
+    return coinEntries.filter((e) => ids.has(e.lessonId))
+  }, [coinEntries, scopedLessons])
+
+  const trend = useMemo(
+    () => getCoinTrend(scopedLessons, scopedEntries, { perLesson: !!scopedGroupId }),
+    [scopedLessons, scopedEntries, scopedGroupId],
+  )
 
   const leaderboard = useMemo(
-    () =>
-      getLeaderboardByPeriod(students, coinEntries, lessons, {
-        groupId: scopedGroupId,
-        monthIndex: scopedMonth,
-      }).slice(0, 8),
-    [students, coinEntries, lessons, scopedGroupId, scopedMonth],
+    () => getLeaderboardByPeriod(students, scopedEntries, scopedLessons, { groupId: scopedGroupId }).slice(0, 8),
+    [students, scopedEntries, scopedLessons, scopedGroupId],
   )
 
-  const categoryDistribution = useMemo(() => {
-    const scopedEntries = coinEntries.filter((e) => {
-      if (!scopedMonth) return true
-      const lesson = lessons.find((l) => l.id === e.lessonId)
-      return lesson?.monthIndex === scopedMonth
-    })
-    return getCategoryDistribution(scopedEntries, { groupId: scopedGroupId, students })
-  }, [coinEntries, lessons, scopedGroupId, scopedMonth, students])
+  const categoryDistribution = useMemo(() => getCategoryDistribution(scopedEntries), [scopedEntries])
 
-  const groupComparison = useMemo(
-    () => getGroupComparison(groups, students, coinEntries, lessons, { monthIndex: scopedMonth }),
-    [groups, students, coinEntries, lessons, scopedMonth],
-  )
+  const groupComparison = useMemo(() => {
+    const ids = new Set(periodLessons.map((l) => l.id))
+    return getGroupComparison(
+      groups,
+      coinEntries.filter((e) => ids.has(e.lessonId)),
+      periodLessons,
+    )
+  }, [groups, coinEntries, periodLessons])
+
+  const periodLabel = scopedMonth ? formatMonthKey(scopedMonth) : 'Barcha oylar'
 
   return (
     <div className="space-y-4">
@@ -113,8 +129,8 @@ export function AnalyticsCharts() {
         groupId={groupId}
         setGroupId={setGroupId}
         monthOptions={monthOptions}
-        monthIndex={monthIndex}
-        setMonthIndex={setMonthIndex}
+        month={month}
+        setMonth={setMonth}
       />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -123,7 +139,9 @@ export function AnalyticsCharts() {
             <CardTitle className="flex items-center gap-2 text-base">
               <LineChartIcon className="size-4 text-primary" /> Coinlar dinamikasi
             </CardTitle>
-            <CardDescription>Har bir dars bo'yicha berilgan coinlar yig'indisi</CardDescription>
+            <CardDescription>
+              {periodLabel} · {scopedGroupId ? "har bir dars bo'yicha" : "kunlar bo'yicha (barcha guruhlar)"}
+            </CardDescription>
           </CardHeader>
           <CardContent className="h-72 pt-0">
             {trend.length === 0 ? (
@@ -171,7 +189,7 @@ export function AnalyticsCharts() {
             <CardTitle className="flex items-center gap-2 text-base">
               <Trophy className="size-4 text-coin-foreground dark:text-coin" /> Top o'quvchilar
             </CardTitle>
-            <CardDescription>Tanlangan davr bo'yicha eng faol o'quvchilar</CardDescription>
+            <CardDescription>{periodLabel} · eng ko'p coin yig'ganlar</CardDescription>
           </CardHeader>
           <CardContent className="h-72 pt-0">
             {leaderboard.length === 0 ? (
@@ -215,7 +233,7 @@ export function AnalyticsCharts() {
             <CardTitle className="flex items-center gap-2 text-base">
               <PieChartIcon className="size-4 text-primary" /> Kategoriya bo'yicha taqsimot
             </CardTitle>
-            <CardDescription>Uy vazifasi / Sinf ishi / Savol-javob nisbati</CardDescription>
+            <CardDescription>{periodLabel} · {categoryDistribution.map((c) => c.label).join(' / ')}</CardDescription>
           </CardHeader>
           <CardContent className="h-72 pt-0">
             {categoryDistribution.every((c) => c.total === 0) ? (
@@ -262,11 +280,11 @@ export function AnalyticsCharts() {
             <CardTitle className="flex items-center gap-2 text-base">
               <BarChart3 className="size-4 text-primary" /> Guruhlar taqqoslanishi
             </CardTitle>
-            <CardDescription>Har bir guruhda tarqatilgan jami coinlar</CardDescription>
+            <CardDescription>{periodLabel} · har bir guruhda berilgan coinlar</CardDescription>
           </CardHeader>
           <CardContent className="h-72 pt-0">
             {groupComparison.every((g) => g.total === 0) ? (
-              <EmptyState icon={BarChart3} title="Ma'lumot yo'q" description="Hali guruhlar bo'yicha coin berilmagan." />
+              <EmptyState icon={BarChart3} title="Ma'lumot yo'q" description="Bu davrda guruhlarga coin berilmagan." />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={groupComparison} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
@@ -276,7 +294,6 @@ export function AnalyticsCharts() {
                     tickLine={false}
                     axisLine={false}
                     tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                    tickFormatter={(v) => v.replace('Frontend PDP-24', '')}
                   />
                   <YAxis
                     tickLine={false}

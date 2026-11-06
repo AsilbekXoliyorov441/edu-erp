@@ -30,6 +30,8 @@ export function useGameActions() {
   const finish = useMutation(api.games.finish)
   const join = useMutation(api.games.join)
   const answer = useMutation(api.games.answer)
+  const fiftyFifty = useMutation(api.games.fiftyFifty)
+  const react = useMutation(api.games.react)
 
   return {
     create: (args) => create({ token, ...args }),
@@ -38,7 +40,10 @@ export function useGameActions() {
     next: (gameId) => next({ token, gameId }),
     finish: (gameId) => finish({ token, gameId }),
     join: (gameId, hero) => join({ token, gameId, hero }),
-    answer: (gameId, questionIndex, selectedIndex) => answer({ token, gameId, questionIndex, selectedIndex }),
+    answer: (gameId, questionIndex, selectedIndex, boost) =>
+      answer({ token, gameId, questionIndex, selectedIndex, ...(boost ? { boost } : {}) }),
+    fiftyFifty: (gameId, questionIndex) => fiftyFifty({ token, gameId, questionIndex }),
+    react: (gameId, emoji) => react({ token, gameId, emoji }),
   }
 }
 

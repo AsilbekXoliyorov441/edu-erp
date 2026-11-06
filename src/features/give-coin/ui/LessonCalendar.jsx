@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
-import { LESSON_WEEKDAYS, getDayKey, getMonthKey, inferGroupSchedule } from '@/shared/lib/stats/monthlyGoal'
+import { LESSON_WEEKDAYS, getDayKey, getMonthKey, getGroupSchedule } from '@/shared/lib/stats/monthlyGoal'
 import { formatDayKey, formatUzMonthYear } from '@/shared/lib/date'
 import { cn } from '@/shared/lib/utils'
 
@@ -19,7 +19,8 @@ function dayKeyOf(year, month, day) {
 /** Month calendar of a group's lesson days: graded days (a lesson exists — can't be picked
  * again), missed lesson days (on the group's weekly track, in the past, never graded) and
  * the rest. Future days can't be picked. */
-export function LessonCalendar({ lessons, selected, onSelect }) {
+export function LessonCalendar({ group, lessons, selected, onSelect }) {
+  const groupSchedule = group?.schedule
   const todayKey = getDayKey()
   const [month, setMonth] = useState(() => (selected ? selected.slice(0, 7) : getMonthKey()))
 
@@ -32,10 +33,10 @@ export function LessonCalendar({ lessons, selected, onSelect }) {
     const keys = [...counts.keys()].sort()
     return {
       countByDay: counts,
-      weekdays: LESSON_WEEKDAYS[inferGroupSchedule(lessons)],
+      weekdays: LESSON_WEEKDAYS[getGroupSchedule({ schedule: groupSchedule }, lessons)],
       startKey: keys[0] ?? null,
     }
-  }, [lessons])
+  }, [groupSchedule, lessons])
 
   const [year, mon] = month.split('-').map(Number)
   const daysInMonth = new Date(Date.UTC(year, mon, 0)).getUTCDate()

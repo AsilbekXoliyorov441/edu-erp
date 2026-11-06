@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowLeft, Calendar, Check, ChevronLeft, ChevronRight, Coins, Pencil } from 'lucide-react'
-import { RenameGroupDialog } from '@/features/rename-group/ui/RenameGroupDialog'
+import { ArrowLeft, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coins, Pencil } from 'lucide-react'
+import { EditGroupDialog } from '@/features/edit-group/ui/EditGroupDialog'
 import { useCurrentMonthGoal } from '@/entities/monthly-goal/model/store'
+import { formatGroupSchedule } from '@/entities/group/model/options'
 import { formatUzLongDate, getMonthLabel } from '@/shared/lib/date'
 import { useLessonSession } from '@/features/give-coin/model/useLessonSession'
+import { QuestionTracker } from './QuestionTracker'
 import { GradingTable } from '@/widgets/LessonSessionPanel/GradingTable'
 import { cn } from '@/shared/lib/utils'
 
@@ -39,12 +41,12 @@ function LessonCard({ group, stats, lessonNumber, monthIndex, date, onBack }) {
         <div className="flex flex-col gap-[8px]">
           <div className="flex items-center gap-[4px]">
             <h2 className="text-[24px] leading-tight font-extrabold tracking-[-0.01em] text-[var(--cs-text)]">{group.name}</h2>
-            <RenameGroupDialog
+            <EditGroupDialog
               group={group}
               trigger={
                 <button
                   type="button"
-                  aria-label="Guruh nomini tahrirlash"
+                  aria-label="Guruhni tahrirlash"
                   className="cs-focus flex size-[36px] cursor-pointer items-center justify-center rounded-[8px] bg-transparent text-[var(--cs-muted)] transition-colors hover:bg-[var(--cs-hover)]"
                 >
                   <Pencil size={16} />
@@ -53,6 +55,12 @@ function LessonCard({ group, stats, lessonNumber, monthIndex, date, onBack }) {
             />
           </div>
           <div className="flex flex-wrap gap-[6px]">
+            {formatGroupSchedule(group) && (
+              <Chip>
+                <Clock size={14} strokeWidth={2.2} aria-hidden="true" />
+                {formatGroupSchedule(group)}
+              </Chip>
+            )}
             <Chip>{stats.studentCount} o'quvchi</Chip>
             <Chip>{stats.lessonCount} dars o'tildi</Chip>
             <Chip className="bg-[var(--cs-warn-soft)] text-[var(--cs-warn-text)]">
@@ -201,6 +209,8 @@ export function LessonSessionPanel({ group, students, stats, nextLessonNumber, m
           <span className="text-[12.5px] text-[var(--cs-muted)]">o'rtacha {formatAverage(average)} / 10</span>
         </StatCard>
       </div>
+
+      <QuestionTracker session={session} students={students} />
 
       <GradingTable
         rows={rows}

@@ -15,8 +15,8 @@ export function useTopics() {
 
   return {
     items,
-    create: (title) => createMutation({ token, title }),
-    update: (id, title) => updateMutation({ token, id, title }),
+    create: (title, subject, section) => createMutation({ token, title, subject, section }),
+    update: (id, title, subject, section) => updateMutation({ token, id, title, subject, section }),
     remove: (id) => removeMutation({ token, id }),
     importPresets: () => importPresetsMutation({ token }),
   }

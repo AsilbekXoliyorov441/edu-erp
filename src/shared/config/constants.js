@@ -13,7 +13,8 @@ export const TENANT_ROLES = {
 
 /** Fixed coin categories and their per-lesson max value — enforced across every coin input. */
 export const COIN_CATEGORIES = {
-  savol_javob: { key: 'savol_javob', label: 'Savol-javob', max: 5 },
+  // `counter`: graded by tapping +1 per correct answer instead of picking a score directly.
+  savol_javob: { key: 'savol_javob', label: 'Savol-javob', max: 5, input: 'counter' },
   uy_vazifasi: { key: 'uy_vazifasi', label: 'Uy vazifasi', max: 5 },
   /** No longer graded — kept only so lessons graded before the change still show their label. */
   sinf_ishi: { key: 'sinf_ishi', label: 'Sinf ishi', max: 2, retired: true },
@@ -72,6 +73,7 @@ export const ROUTES = {
   STUDENT_PROFILE: '/oquvchi/:studentId',
   studentProfile: (id) => `/oquvchi/${id}`,
   COIN_MARKET: '/coin-market',
+  ORDERS: '/buyurtmalar',
   LEADERBOARD: '/reyting',
   SETTINGS: '/sozlamalar',
   TEACHERS_DASHBOARD: '/teachers-dashboard',
@@ -128,3 +130,30 @@ export const GAME_HEROES = [
   { id: 'wizard', emoji: '🧙', name: 'Sehrgar', from: '#818cf8', to: '#3730a3' },
   { id: 'rocket', emoji: '🚀', name: 'Raketa', from: '#60a5fa', to: '#7c3aed' },
 ]
+
+/** Hero id meaning "my own profile photo" instead of an emoji hero. */
+export const PHOTO_HERO_ID = 'photo'
+
+/** Emoji reactions players can fire during a game. */
+export const GAME_REACTIONS = ['👏', '🔥', '😂', '😮', '💪', '❤️', '🤯', '🎉']
+
+/** Power-ups — each usable once per game. */
+export const GAME_POWERUPS = [
+  { id: 'fifty', label: '50/50', hint: "Ikkita noto'g'ri javobni olib tashlaydi" },
+  { id: 'double', label: '2× ball', hint: "To'g'ri topsangiz ball ikki baravar" },
+  { id: 'shield', label: 'Qalqon', hint: 'Xato qilsangiz ham seriya saqlanadi' },
+]
+
+/** Test subjects ("fan") — every topic in the "Testlar" bank belongs to one, so the bank
+ * reads as clear sections. Order here = section order on the page. */
+export const TEST_SUBJECTS = [
+  { key: 'frontend', label: 'Frontend asoslari', short: 'FE', color: '#0F766E' },
+  { key: 'html', label: 'HTML', short: 'HTML', color: '#E34F26' },
+  { key: 'css', label: 'CSS', short: 'CSS', color: '#1572B6' },
+  { key: 'html_css', label: 'HTML + CSS', short: 'H+C', color: '#7C3AED' },
+  { key: 'javascript', label: 'JavaScript', short: 'JS', color: '#CA8A04' },
+  { key: 'react', label: 'React', short: 'Re', color: '#0891B2' },
+  { key: 'python', label: 'Python', short: 'Py', color: '#2563EB' },
+  { key: 'other', label: 'Boshqa', short: '•••', color: '#64748B' },
+]
+export const TEST_SUBJECT_KEYS = TEST_SUBJECTS.map((s) => s.key)

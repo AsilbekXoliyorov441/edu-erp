@@ -4,6 +4,7 @@ import { cn } from '@/shared/lib/utils'
 import { useAuthStore } from '@/entities/session/model/store'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/ui/dropdown-menu'
 import { NAV_ITEMS } from '@/widgets/Sidebar/navItems'
+import { useNavBadges } from '@/widgets/Sidebar/useNavBadges'
 
 /** Bottom bar fits at most this many tabs before the rest collapse into "Yana" — keeps
  * icons legible instead of squeezing everything (e.g. once "Testlar" joined the teacher
@@ -15,7 +16,7 @@ function isItemActive(pathname, item) {
   return pathname === item.to || pathname.startsWith(`${item.to}/`)
 }
 
-function NavTab({ item, isActive }) {
+function NavTab({ item, isActive, badge }) {
   return (
     <NavLink
       to={item.to}
@@ -28,7 +29,14 @@ function NavTab({ item, isActive }) {
           isActive ? 'bg-secondary text-primary' : 'text-muted-foreground',
         )}
       >
-        <item.icon className="size-5 shrink-0" />
+        <span className="relative">
+          <item.icon className="size-5 shrink-0" />
+          {badge > 0 && (
+            <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-white">
+              {badge > 9 ? '9+' : badge}
+            </span>
+          )}
+        </span>
       </span>
       <span className={cn('max-w-full truncate text-[10px] font-medium leading-tight', isActive ? 'text-primary' : 'text-muted-foreground')}>
         {item.label}
@@ -41,6 +49,7 @@ export function MobileNav() {
   const role = useAuthStore((s) => s.role)
   const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin)
   const { pathname } = useLocation()
+  const badges = useNavBadges()
 
   const items = NAV_ITEMS.filter((item) => item.roles.includes(role) && (!item.superAdminOnly || isSuperAdmin))
   const sorted = [...items].sort((a, b) => (a.mobilePriority ?? Infinity) - (b.mobilePriority ?? Infinity))
@@ -55,7 +64,7 @@ export function MobileNav() {
       aria-label="Asosiy navigatsiya"
     >
       {visible.map((item) => (
-        <NavTab key={item.to} item={item} isActive={isItemActive(pathname, item)} />
+        <NavTab key={item.to} item={item} isActive={isItemActive(pathname, item)} badge={item.badge ? badges[item.badge] : 0} />
       ))}
 
       {rest.length > 0 && (
@@ -83,6 +92,11 @@ export function MobileNav() {
                   <NavLink to={item.to} className={cn('gap-2.5', isActive && 'bg-secondary text-primary')}>
                     <item.icon className="size-4" />
                     {item.label}
+                    {item.badge && badges[item.badge] > 0 && (
+                      <span className="ml-auto rounded-full bg-destructive px-1.5 text-[10px] font-bold text-white">
+                        {badges[item.badge]}
+                      </span>
+                    )}
                   </NavLink>
                 </DropdownMenuItem>
               )

@@ -15,6 +15,11 @@ import { StudentTimeline } from '@/widgets/StudentTimeline/StudentTimeline'
 import { GiftGrid } from '@/widgets/GiftGrid/GiftGrid'
 import { MonthlyGoalCard } from '@/widgets/MonthlyGoal/MonthlyGoalCard'
 import { RedeemGiftDialog } from '@/features/redeem-gift/ui/RedeemGiftDialog'
+import { AvatarRemoveButton, AvatarUploadButton } from '@/features/upload-avatar/ui/AvatarUploadButton'
+import { OrderGiftDialog } from '@/features/order-gift/ui/OrderGiftDialog'
+import { ResetPinButton } from '@/features/manage-orders/ui/ResetPinButton'
+import { useGiftOrders } from '@/entities/gift-order/model/store'
+import { getReservedCoins } from '@/entities/gift-order/model/status'
 import { useAuthStore } from '@/entities/session/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
 import { useGroupStore } from '@/entities/group/model/store'
@@ -39,6 +44,7 @@ export function StudentProfilePage() {
   const transactions = useTransactionStore((s) => s.items)
   const gifts = useGiftStore((s) => s.items)
   const attendance = useAttendanceStore((s) => s.items)
+  const { items: orders } = useGiftOrders()
 
   const isBlocked = role === ROLES.STUDENT && studentId !== userId
 
@@ -71,6 +77,8 @@ export function StudentProfilePage() {
     (e) => e.student.id === student.id,
   )
   const canManage = role === ROLES.TEACHER
+  const isSelf = role === ROLES.STUDENT && student.id === userId
+  const available = balance - getReservedCoins(orders, student.id)
   const backTo = canManage && student.groupId ? ROUTES.groupDetail(student.groupId) : ROUTES.LEADERBOARD
 
   return (
@@ -87,7 +95,16 @@ export function StudentProfilePage() {
       <Card>
         <CardContent className="flex flex-col items-center gap-5 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col items-center gap-3 sm:flex-row">
-            <StudentAvatar student={student} size="lg" />
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="relative">
+                <StudentAvatar student={student} size="lg" className={isSelf ? 'size-20 text-xl' : undefined} />
+                {isSelf && <AvatarUploadButton className="absolute -right-1 -bottom-1" />}
+              </div>
+              {isSelf && student.avatar && <AvatarRemoveButton />}
+              {isSelf && !student.avatar && (
+                <span className="text-[11px] font-medium text-muted-foreground">Rasm qo'shing 📸</span>
+              )}
+            </div>
             <div className="text-center sm:text-left">
               <h1 className="text-xl font-bold text-foreground">{student.fullName}</h1>
               <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground sm:justify-start">
@@ -96,6 +113,11 @@ export function StudentProfilePage() {
                   <Calendar className="size-3.5" /> {formatUzDate(student.joinedAt)} dan beri
                 </span>
                 {rankEntry && <Badge variant="outline">Guruhda #{rankEntry.rank}</Badge>}
+                {canManage && (
+                  <Badge variant={student.hasPurchasePin ? 'success' : 'outline'}>
+                    {student.hasPurchasePin ? "Xarid PIN o'rnatilgan" : "Xarid PIN yo'q"}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -105,6 +127,11 @@ export function StudentProfilePage() {
               <AnimatedNumber value={balance} />
               <span className="ml-1 text-lg font-semibold text-muted-foreground">coin</span>
             </p>
+            {canManage && student.hasPurchasePin && (
+              <div className="mt-2 flex justify-center sm:justify-end">
+                <ResetPinButton student={student} />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -135,9 +162,26 @@ export function StudentProfilePage() {
             </h3>
             <GiftGrid
               gifts={gifts}
-              balance={balance}
+              balance={isSelf ? available : balance}
               showLink={canManage}
               actions={(gift, affordable) => {
+                if (isSelf) {
+                  return affordable ? (
+                    <OrderGiftDialog
+                      gift={gift}
+                      available={available}
+                      trigger={
+                        <Button size="sm" className="w-full">
+                          Buyurtma berish
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    <Button size="sm" variant="outline" className="w-full" disabled>
+                      Yetarli emas
+                    </Button>
+                  )
+                }
                 if (!canManage) return null
                 if (!affordable) {
                   return (

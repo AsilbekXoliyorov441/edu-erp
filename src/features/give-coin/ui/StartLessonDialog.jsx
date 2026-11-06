@@ -28,7 +28,7 @@ function defaultDay(lessons) {
   return lessons.some((l) => getDayKey(l.date) === today) ? null : today
 }
 
-export function StartLessonDialog({ onStart, disabled, lessons = [] }) {
+export function StartLessonDialog({ group, onStart, disabled, lessons = [] }) {
   const [open, setOpen] = useState(false)
   const [day, setDay] = useState(null)
   const gradedToday = lessons.some((l) => getDayKey(l.date) === getDayKey())
@@ -67,7 +67,7 @@ export function StartLessonDialog({ onStart, disabled, lessons = [] }) {
                 <CalendarCheck className="size-4 shrink-0" /> Bugungi dars allaqachon baholangan.
               </p>
             )}
-            <LessonCalendar lessons={lessons} selected={day} onSelect={setDay} />
+            <LessonCalendar group={group} lessons={lessons} selected={day} onSelect={setDay} />
           </div>
           <DialogFooter className="items-center gap-3 sm:justify-between">
             <p className="text-sm text-muted-foreground">

@@ -45,7 +45,10 @@ export default defineSchema({
   students: defineTable({
     groupId: v.id('groups'),
     fullName: v.string(),
+    /** Public URL of the student's own profile photo (also shown as their game avatar). */
     avatar: v.union(v.string(), v.null()),
+    /** Storage file behind `avatar`, so a replaced photo can be deleted. */
+    avatarStorageId: v.optional(v.id('_storage')),
     joinedAt: v.string(),
     login: v.string(),
     passwordHash: v.string(),
@@ -55,6 +58,13 @@ export default defineSchema({
      * (status `removed`) so the merge stays auditable and reversible; all of its history has
      * been re-pointed at the student named here. */
     mergedIntoId: v.optional(v.id('students')),
+    /** Scrypt hash of the student's own 4–6 digit purchase PIN. Teachers hand out login
+     * passwords, so a classmate may know one — the PIN is set by the student alone and is
+     * required for every gift order. A teacher can only clear it, never read it. */
+    purchasePinHash: v.optional(v.string()),
+    pinFailedAttempts: v.optional(v.number()),
+    /** ms timestamp; PIN entry is blocked until then after too many wrong attempts. */
+    pinLockedUntil: v.optional(v.number()),
   })
     .index('by_login', ['login'])
     .index('by_group', ['groupId']),
@@ -63,6 +73,17 @@ export default defineSchema({
     name: v.string(),
     createdAt: v.string(),
     teacherId: v.optional(v.id('teachers')),
+    /** Weekly track: `odd` = Du/Chor/Juma ("toq kunlar"), `even` = Se/Pay/Shan ("juft kunlar").
+     * Optional for groups created before it existed — those fall back to inferring it from
+     * their lessons' weekdays. */
+    schedule: v.optional(v.union(v.literal('odd'), v.literal('even'))),
+    /** Lesson time as `HH:mm`, Tashkent time. */
+    startTime: v.optional(v.string()),
+    endTime: v.optional(v.string()),
+    /** Course direction, for the group's icon. */
+    direction: v.optional(
+      v.union(v.literal('frontend'), v.literal('python'), v.literal('ai'), v.literal('cyber'), v.literal('other')),
+    ),
   }).index('by_teacher', ['teacherId']),
 
   lessons: defineTable({
@@ -150,9 +171,16 @@ export default defineSchema({
     score: v.number(),
     streak: v.number(),
     correctCount: v.number(),
-    /** `GAME_HEROES` id the student picked when joining. */
+    /** `GAME_HEROES` id the student picked when joining, or `'photo'` for their own
+     * profile photo. */
     hero: v.optional(v.string()),
     joinedAt: v.number(),
+    /** Power-ups — each one usable once per game. Holds the question index it was used on. */
+    fiftyAt: v.optional(v.number()),
+    /** The two wrong options 50/50 hid on question `fiftyAt`. */
+    fiftyHidden: v.optional(v.array(v.number())),
+    doubleAt: v.optional(v.number()),
+    shieldAt: v.optional(v.number()),
   })
     .index('by_game', ['gameId'])
     .index('by_game_student', ['gameId', 'studentId']),
@@ -165,9 +193,72 @@ export default defineSchema({
     correct: v.boolean(),
     points: v.number(),
     elapsedMs: v.number(),
+    /** Power-up armed with this answer. */
+    boost: v.optional(v.union(v.literal('double'), v.literal('shield'))),
   })
     .index('by_game_question', ['gameId', 'questionIndex'])
     .index('by_player', ['playerId']),
+
+  /** Emoji reactions players send during a game — float across every screen. */
+  gameReactions: defineTable({
+    gameId: v.id('games'),
+    playerId: v.id('gamePlayers'),
+    emoji: v.string(),
+    createdAt: v.number(),
+  }).index('by_game', ['gameId', 'createdAt']),
+
+  /** A student's request to buy a gift with their coins. Coins are only *reserved* while
+   * `pending` (they count against the available balance); the `gift_redeemed` transaction is
+   * written when a teacher/admin confirms with "Buyurtma berdim" (`ordered`). Gift fields are
+   * snapshotted so the order still reads correctly if the gift is later edited or deleted. */
+  giftOrders: defineTable({
+    studentId: v.id('students'),
+    groupId: v.id('groups'),
+    centerId: v.id('centers'),
+    giftId: v.id('gifts'),
+    giftName: v.string(),
+    giftPrice: v.number(),
+    giftImage: v.optional(v.string()),
+    giftIcon: v.optional(v.string()),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('ordered'),
+      v.literal('delivered'),
+      v.literal('rejected'),
+      v.literal('cancelled'),
+    ),
+    createdAt: v.number(),
+    orderedAt: v.optional(v.number()),
+    deliveredAt: v.optional(v.number()),
+    closedAt: v.optional(v.number()),
+    /** Teacher/admin who made the last decision (ordered/delivered/rejected). */
+    handledBy: v.optional(v.id('teachers')),
+    rejectReason: v.optional(v.string()),
+    transactionId: v.optional(v.id('transactions')),
+  })
+    .index('by_student', ['studentId'])
+    .index('by_center', ['centerId']),
+
+  /** In-app notifications. `recipientId` is a `teachers` or `students` id, matching the
+   * session's `userId`. */
+  notifications: defineTable({
+    recipientId: v.union(v.id('teachers'), v.id('students')),
+    type: v.union(
+      v.literal('order_new'),
+      v.literal('order_cancelled'),
+      v.literal('order_ordered'),
+      v.literal('order_delivered'),
+      v.literal('order_rejected'),
+      v.literal('pin_reset'),
+    ),
+    title: v.string(),
+    body: v.string(),
+    orderId: v.optional(v.id('giftOrders')),
+    read: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index('by_recipient', ['recipientId', 'createdAt'])
+    .index('by_recipient_read', ['recipientId', 'read']),
 
   gifts: defineTable({
     name: v.string(),
@@ -193,6 +284,11 @@ export default defineSchema({
    * per group. */
   tests: defineTable({
     title: v.string(),
+    /** Subject section on the "Testlar" page (`TEST_SUBJECTS` keys). Optional for older
+     * topics — the app infers it from the title until the teacher picks one. */
+    subject: v.optional(v.string()),
+    /** Inner section inside the subject ("Asoslar", "Formalar", …) — free text, optional. */
+    section: v.optional(v.string()),
     createdAt: v.string(),
     teacherId: v.id('teachers'),
   }).index('by_teacher', ['teacherId']),

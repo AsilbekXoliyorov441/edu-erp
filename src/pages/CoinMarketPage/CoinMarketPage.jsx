@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Plus, PenLine, Search } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, PenLine, Search, ShoppingBag, ShoppingCart } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
 import { Card, CardContent } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
@@ -11,8 +12,11 @@ import { useAuthStore } from '@/entities/session/model/store'
 import { useGiftStore } from '@/entities/gift/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
 import { useTransactionStore } from '@/entities/transaction/model/store'
+import { useGiftOrders } from '@/entities/gift-order/model/store'
+import { getReservedCoins } from '@/entities/gift-order/model/status'
+import { OrderGiftDialog } from '@/features/order-gift/ui/OrderGiftDialog'
 import { getStudentBalance } from '@/shared/lib/stats'
-import { ROLES } from '@/shared/config/constants'
+import { ROLES, ROUTES } from '@/shared/config/constants'
 
 export function CoinMarketPage() {
   const role = useAuthStore((s) => s.role)
@@ -28,6 +32,9 @@ export function CoinMarketPage() {
   const isTeacher = role === ROLES.TEACHER
   const currentStudent = !isTeacher ? students.find((s) => s.id === userId) : null
   const balance = currentStudent ? getStudentBalance(currentStudent.id, transactions) : null
+  const { items: orders } = useGiftOrders()
+  const reserved = !isTeacher ? getReservedCoins(orders, userId) : 0
+  const available = balance != null ? balance - reserved : null
 
   const categories = useMemo(() => [...new Set(gifts.map((g) => g.category).filter(Boolean))].sort(), [gifts])
 
@@ -46,9 +53,29 @@ export function CoinMarketPage() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {isTeacher ? `${visibleGifts.length} ta mahsulot` : balance != null ? `Balansingiz: ${balance} coin` : ''}
-        </p>
+        {isTeacher ? (
+          <p className="text-sm text-muted-foreground">{visibleGifts.length} ta mahsulot</p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            {available != null && (
+              <span className="text-muted-foreground">
+                Ishlatish mumkin: <b className="text-coin-foreground tabular-nums dark:text-coin">{available} coin</b>
+              </span>
+            )}
+            {reserved > 0 && (
+              <span className="text-muted-foreground">
+                Band qilingan: <b className="tabular-nums text-foreground">{reserved} coin</b>
+              </span>
+            )}
+          </div>
+        )}
+        {!isTeacher && (
+          <Button asChild variant="outline" className="gap-1.5">
+            <Link to={ROUTES.ORDERS}>
+              <ShoppingBag className="size-4" /> Buyurtmalarim
+            </Link>
+          </Button>
+        )}
         {isTeacher && (
           <GiftFormDialog
             trigger={
@@ -94,7 +121,7 @@ export function CoinMarketPage() {
         <CardContent className="p-5">
           <GiftGrid
             gifts={visibleGifts}
-            balance={isTeacher ? null : balance}
+            balance={isTeacher ? null : available}
             showLink={isTeacher}
             actions={
               isTeacher
@@ -111,7 +138,22 @@ export function CoinMarketPage() {
                       <DeleteGiftDialog gift={gift} />
                     </div>
                   )
-                : undefined
+                : (gift, affordable) =>
+                    affordable && available != null ? (
+                      <OrderGiftDialog
+                        gift={gift}
+                        available={available}
+                        trigger={
+                          <Button size="sm" className="w-full gap-1.5">
+                            <ShoppingCart /> Buyurtma
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <Button size="sm" variant="outline" className="w-full" disabled>
+                        {available == null ? '...' : `Yana ${gift.price - available} coin`}
+                      </Button>
+                    )
             }
           />
         </CardContent>

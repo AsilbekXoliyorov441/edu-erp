@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Users2, Calendar, TrendingUp } from 'lucide-react'
+import { Users2, Calendar, TrendingUp, Clock, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { Badge } from '@/shared/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
 import { CreateGroupDialog } from '@/features/create-group/ui/CreateGroupDialog'
-import { RenameGroupDialog } from '@/features/rename-group/ui/RenameGroupDialog'
+import { EditGroupDialog } from '@/features/edit-group/ui/EditGroupDialog'
 import { DeleteGroupDialog } from '@/features/remove-group/ui/DeleteGroupDialog'
 import { useGroupStore } from '@/entities/group/model/store'
+import { formatGroupSchedule } from '@/entities/group/model/options'
+import { GroupIcon } from '@/entities/group/ui/GroupIcon'
 import { useStudentStore } from '@/entities/student/model/store'
 import { useLessonStore } from '@/entities/lesson/model/store'
 import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
@@ -81,14 +83,21 @@ export function GroupsPage() {
                   <Card className="h-full">
                     <CardContent className="space-y-4 p-5">
                       <div className="flex items-center gap-3 pr-8">
-                        <div className="flex size-11 items-center justify-center rounded-2xl bg-secondary text-primary">
-                          <Users2 className="size-5" />
-                        </div>
+                        <GroupIcon direction={group.direction} />
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-foreground">{group.name}</p>
                           <p className="text-xs text-muted-foreground">{stats.studentCount} o'quvchi</p>
                         </div>
                       </div>
+                      {formatGroupSchedule(group) ? (
+                        <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                          <Clock className="size-3.5 text-muted-foreground" /> {formatGroupSchedule(group)}
+                        </p>
+                      ) : (
+                        <p className="flex items-center gap-1.5 text-sm font-medium text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="size-3.5" /> Dars kunlari belgilanmagan
+                        </p>
+                      )}
                       {isSuperAdmin && teacherById.get(group.teacherId) && (
                         <Badge variant="outline">{teacherById.get(group.teacherId).fullName}</Badge>
                       )}
@@ -112,7 +121,7 @@ export function GroupsPage() {
                   </Card>
                 </Link>
                 <div className="absolute right-3 top-3 flex items-center gap-1">
-                  <RenameGroupDialog group={group} />
+                  <EditGroupDialog group={group} />
                   <DeleteGroupDialog group={group} />
                 </div>
               </motion.div>

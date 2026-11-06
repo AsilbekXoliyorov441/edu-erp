@@ -27,22 +27,38 @@ export const listForTeacher = query({
     const questions = await ctx.db.query('testQuestions').collect()
     const assignments = await ctx.db.query('testAssignments').collect()
 
+    const groups = await ctx.db.query('groups').collect()
+    const groupName = new Map(groups.map((g) => [g._id, g.name]))
+    const attempts = await ctx.db.query('testAttempts').collect()
+
     return tests
-      .map((t) => ({
-        ...t,
-        questionCount: questions.filter((q) => q.testId === t._id).length,
-        groupCount: assignments.filter((a) => a.testId === t._id).length,
-      }))
+      .map((t) => {
+        const groupIds = assignments.filter((a) => a.testId === t._id).map((a) => a.groupId)
+        return {
+          ...t,
+          questionCount: questions.filter((q) => q.testId === t._id).length,
+          groupCount: groupIds.length,
+          groupIds,
+          groupNames: groupIds.map((id) => groupName.get(id)).filter(Boolean),
+          attemptCount: attempts.filter((a) => a.testId === t._id).length,
+        }
+      })
       .sort((a, b) => b._creationTime - a._creationTime)
   },
 })
 
 export const create = mutation({
-  args: { token: v.string(), title: v.string() },
-  handler: async (ctx, { token, title }) => {
+  args: { token: v.string(), title: v.string(), subject: v.optional(v.string()), section: v.optional(v.string()) },
+  handler: async (ctx, { token, title, subject, section }) => {
     const scope = await getScope(ctx, token)
     requireTeacherScope(scope)
-    return await ctx.db.insert('tests', { title, createdAt: new Date().toISOString(), teacherId: scope.session.userId })
+    return await ctx.db.insert('tests', {
+      title,
+      ...(subject ? { subject } : {}),
+      ...(section?.trim() ? { section: section.trim() } : {}),
+      createdAt: new Date().toISOString(),
+      teacherId: scope.session.userId,
+    })
   },
 })
 
@@ -64,7 +80,12 @@ export const importPresets = mutation({
     let added = 0
     for (const preset of PRESET_TESTS) {
       if (existingTitles.has(preset.title)) continue
-      const testId = await ctx.db.insert('tests', { title: preset.title, createdAt: new Date().toISOString(), teacherId })
+      const testId = await ctx.db.insert('tests', {
+        title: preset.title,
+        subject: preset.subject,
+        createdAt: new Date().toISOString(),
+        teacherId,
+      })
       for (const [index, question] of preset.questions.entries()) {
         await ctx.db.insert('testQuestions', { testId, ...question, order: index + 1 })
       }
@@ -75,10 +96,21 @@ export const importPresets = mutation({
 })
 
 export const update = mutation({
-  args: { token: v.string(), id: v.id('tests'), title: v.string() },
-  handler: async (ctx, { token, id, title }) => {
+  args: {
+    token: v.string(),
+    id: v.id('tests'),
+    title: v.string(),
+    subject: v.optional(v.string()),
+    section: v.optional(v.string()),
+  },
+  handler: async (ctx, { token, id, title, subject, section }) => {
     await requireTestOwner(ctx, token, id)
-    await ctx.db.patch(id, { title })
+    await ctx.db.patch(id, {
+      title,
+      ...(subject ? { subject } : {}),
+      // "" clears the section (the topic goes back to "Umumiy").
+      ...(section !== undefined ? { section: section.trim() || undefined } : {}),
+    })
   },
 })
 

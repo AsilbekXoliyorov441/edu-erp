@@ -1,22 +1,14 @@
-import { COIN_CATEGORY_LIST, STUDENT_STATUS } from '@/shared/config/constants'
+import { COIN_CATEGORIES, STUDENT_STATUS } from '@/shared/config/constants'
 import { getTotalCoinsDistributed } from '@/shared/lib/stats/balance'
-import { LESSON_MAX_COINS } from '@/shared/lib/stats/monthlyGoal'
+import { LESSON_MAX_COINS, getDayKey, getMonthKey } from '@/shared/lib/stats/monthlyGoal'
 
 export function getDashboardOverview({ groups, students, coinEntries, lessons, transactions }) {
   const activeStudents = students.filter((s) => s.status === STUDENT_STATUS.ACTIVE)
 
-  // Real calendar month (not the per-group "12 lessons = 1 oy" pacing bucket used for
-  // progress charts) — otherwise a group with fewer lessons than others would have its
-  // current activity excluded, and the figure wouldn't match what "this month" means here.
-  const now = new Date()
-  const lessonIdsThisMonth = new Set(
-    lessons
-      .filter((l) => {
-        const lessonDate = new Date(l.date)
-        return lessonDate.getFullYear() === now.getFullYear() && lessonDate.getMonth() === now.getMonth()
-      })
-      .map((l) => l.id),
-  )
+  // Real calendar month in Tashkent time (same as the monthly goal), not the legacy
+  // "12 lessons = 1 oy" bucket.
+  const thisMonth = getMonthKey()
+  const lessonIdsThisMonth = new Set(lessons.filter((l) => getMonthKey(l.date) === thisMonth).map((l) => l.id))
   const coinsThisMonth = coinEntries
     .filter((e) => lessonIdsThisMonth.has(e.lessonId))
     .reduce((sum, e) => sum + e.value, 0)
@@ -76,41 +68,52 @@ export function getStudentLessonScores(studentId, group, lessons, coinEntries) {
   })
 }
 
-/** Per-lesson coin totals for a trend chart, optionally scoped to one group. */
-export function getCoinTrend(lessons, coinEntries, { groupId } = {}) {
-  const filteredLessons = [...lessons.filter((l) => (groupId ? l.groupId === groupId : true))].sort(
-    (a, b) => a.lessonNumber - b.lessonNumber,
-  )
+/** Coin totals over time for the trend chart. One group → one point per lesson; several
+ * groups → one point per calendar day (lessons of different groups share lesson numbers, so
+ * per-lesson points would be mixed up). Always chronological. */
+export function getCoinTrend(lessons, coinEntries, { perLesson = false } = {}) {
+  const coinsByLesson = new Map()
+  coinEntries.forEach((e) => coinsByLesson.set(e.lessonId, (coinsByLesson.get(e.lessonId) ?? 0) + e.value))
+  const sorted = [...lessons].sort((a, b) => a.date.localeCompare(b.date) || a.lessonNumber - b.lessonNumber)
 
-  return filteredLessons.map((lesson) => ({
-    lessonNumber: lesson.lessonNumber,
-    date: lesson.date,
-    monthIndex: lesson.monthIndex,
-    total: coinEntries.filter((e) => e.lessonId === lesson.id).reduce((sum, e) => sum + e.value, 0),
-  }))
-}
+  if (perLesson) {
+    return sorted.map((lesson) => ({
+      key: lesson.id,
+      label: `${lesson.lessonNumber}-dars`,
+      date: lesson.date,
+      total: coinsByLesson.get(lesson.id) ?? 0,
+    }))
+  }
 
-export function getGroupComparison(groups, students, coinEntries, lessons = [], { monthIndex } = {}) {
-  const lessonMonthById = new Map(lessons.map((l) => [l.id, l.monthIndex]))
-  const scopedEntries = monthIndex
-    ? coinEntries.filter((e) => lessonMonthById.get(e.lessonId) === monthIndex)
-    : coinEntries
-
-  return groups.map((group) => {
-    const groupStudentIds = new Set(students.filter((s) => s.groupId === group.id).map((s) => s.id))
-    const total = scopedEntries.filter((e) => groupStudentIds.has(e.studentId)).reduce((sum, e) => sum + e.value, 0)
-    return { groupId: group.id, groupName: group.name, total }
+  const byDay = new Map()
+  sorted.forEach((lesson) => {
+    const day = getDayKey(lesson.date)
+    const point = byDay.get(day) ?? { key: day, label: `${day.slice(8)}.${day.slice(5, 7)}`, date: lesson.date, total: 0, lessons: 0 }
+    point.total += coinsByLesson.get(lesson.id) ?? 0
+    point.lessons += 1
+    byDay.set(day, point)
   })
+  return [...byDay.values()]
 }
 
-export function getCategoryDistribution(coinEntries, { groupId, students } = {}) {
-  const allowedIds =
-    groupId && students ? new Set(students.filter((s) => s.groupId === groupId).map((s) => s.id)) : null
-  const totals = Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, 0]))
-  coinEntries
-    .filter((e) => (allowedIds ? allowedIds.has(e.studentId) : true))
-    .forEach((e) => {
-      totals[e.category] = (totals[e.category] ?? 0) + e.value
-    })
-  return COIN_CATEGORY_LIST.map((c) => ({ key: c.key, label: c.label, total: totals[c.key] }))
+/** Coins handed out per group, attributed by the lesson's group (a transferred student's old
+ * coins stay with the group that gave them). Pass already period-scoped lessons. */
+export function getGroupComparison(groups, coinEntries, lessons) {
+  const groupByLesson = new Map(lessons.map((l) => [l.id, l.groupId]))
+  const totals = new Map()
+  coinEntries.forEach((e) => {
+    const groupId = groupByLesson.get(e.lessonId)
+    if (groupId) totals.set(groupId, (totals.get(groupId) ?? 0) + e.value)
+  })
+  return groups.map((group) => ({ groupId: group.id, groupName: group.name, total: totals.get(group.id) ?? 0 }))
+}
+
+/** Coins per category. Retired categories (Sinf ishi) are shown only when the entries
+ * still contain them — older months were graded with them. */
+export function getCategoryDistribution(coinEntries) {
+  const totals = new Map()
+  coinEntries.forEach((e) => totals.set(e.category, (totals.get(e.category) ?? 0) + e.value))
+  return Object.values(COIN_CATEGORIES)
+    .filter((c) => !c.retired || (totals.get(c.key) ?? 0) > 0)
+    .map((c) => ({ key: c.key, label: c.label, total: totals.get(c.key) ?? 0 }))
 }

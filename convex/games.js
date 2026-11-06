@@ -2,7 +2,7 @@ import { query, mutation, internalMutation } from './_generated/server'
 import { internal } from './_generated/api'
 import { v, ConvexError } from 'convex/values'
 import { getScope, getScopedGroupIdSet, requireGroupOwner, requireTestOwner } from './lib/scoping'
-import { GAME_HEROES, GAME_RULES } from '../src/shared/config/constants'
+import { GAME_HEROES, GAME_REACTIONS, GAME_RULES, PHOTO_HERO_ID } from '../src/shared/config/constants'
 
 /** Extra time accepted after the countdown ends, for network latency. */
 const ANSWER_GRACE_MS = 2000
@@ -197,12 +197,16 @@ export const join = mutation({
     const game = await getGameOrThrow(ctx, gameId)
     const student = await requireGameStudent(ctx, token, game)
     if (game.status === 'finished') throw new ConvexError("O'yin tugagan")
-    if (!GAME_HEROES.some((h) => h.id === hero)) throw new ConvexError('Bunday qahramon yo\'q')
+    const isPhoto = hero === PHOTO_HERO_ID
+    if (isPhoto && !student.avatar) throw new ConvexError('Avval profilingizga rasm yuklang')
+    if (!isPhoto && !GAME_HEROES.some((h) => h.id === hero)) throw new ConvexError('Bunday qahramon yo\'q')
 
     const players = await getPlayers(ctx, gameId)
     const existing = players.find((p) => p.studentId === student._id)
-    const takenByOthers = new Set(players.filter((p) => p !== existing && p.hero).map((p) => p.hero))
-    if (takenByOthers.has(hero) && takenByOthers.size < GAME_HEROES.length) {
+    const takenByOthers = new Set(
+      players.filter((p) => p !== existing && p.hero && p.hero !== PHOTO_HERO_ID).map((p) => p.hero),
+    )
+    if (!isPhoto && takenByOthers.has(hero) && takenByOthers.size < GAME_HEROES.length) {
       throw new ConvexError('Bu qahramonni boshqa o\'quvchi tanladi — boshqasini tanlang')
     }
 
@@ -231,8 +235,14 @@ export const join = mutation({
  * server's clock; one answer per question. When everyone has answered, the question is
  * revealed right away. */
 export const answer = mutation({
-  args: { token: v.string(), gameId: v.id('games'), questionIndex: v.number(), selectedIndex: v.number() },
-  handler: async (ctx, { token, gameId, questionIndex, selectedIndex }) => {
+  args: {
+    token: v.string(),
+    gameId: v.id('games'),
+    questionIndex: v.number(),
+    selectedIndex: v.number(),
+    boost: v.optional(v.union(v.literal('double'), v.literal('shield'))),
+  },
+  handler: async (ctx, { token, gameId, questionIndex, selectedIndex, boost }) => {
     const game = await getGameOrThrow(ctx, gameId)
     const student = await requireGameStudent(ctx, token, game)
     if (game.status !== 'question' || game.currentIndex !== questionIndex) throw new ConvexError('Bu savol yopilgan')
@@ -249,17 +259,23 @@ export const answer = mutation({
 
     const answers = await getAnswersFor(ctx, gameId, questionIndex)
     if (answers.some((a) => a.playerId === player._id)) throw new ConvexError('Siz allaqachon javob bergansiz')
+    if (boost === 'double' && player.doubleAt !== undefined) throw new ConvexError('2× ball allaqachon ishlatilgan')
+    if (boost === 'shield' && player.shieldAt !== undefined) throw new ConvexError('Qalqon allaqachon ishlatilgan')
+    if (player.fiftyAt === questionIndex && player.fiftyHidden?.includes(selectedIndex)) {
+      throw new ConvexError("Bu javob 50/50 bilan olib tashlangan")
+    }
 
     const question = await ctx.db.get(game.questionIds[questionIndex])
     if (!question) throw new ConvexError('Savol topilmadi')
     const correct = selectedIndex === question.correctIndex
-    const points = scoreAnswer({
+    const basePoints = scoreAnswer({
       correct,
       elapsedMs: Math.max(0, elapsedMs),
       durationSec: game.durationSec,
       streakBefore: player.streak,
       final: isFinalQuestion(game, questionIndex),
     })
+    const points = boost === 'double' ? basePoints * 2 : basePoints
 
     await ctx.db.insert('gameAnswers', {
       gameId,
@@ -269,15 +285,73 @@ export const answer = mutation({
       correct,
       points,
       elapsedMs: Math.max(0, elapsedMs),
+      ...(boost ? { boost } : {}),
     })
     await ctx.db.patch(player._id, {
       score: player.score + points,
-      streak: correct ? player.streak + 1 : 0,
+      // The shield keeps a streak alive through one wrong answer.
+      streak: correct ? player.streak + 1 : boost === 'shield' ? player.streak : 0,
       correctCount: player.correctCount + (correct ? 1 : 0),
+      ...(boost === 'double' ? { doubleAt: questionIndex } : {}),
+      ...(boost === 'shield' ? { shieldAt: questionIndex } : {}),
     })
 
     const players = await getPlayers(ctx, gameId)
     if (answers.length + 1 >= players.length) await ctx.db.patch(gameId, { status: 'reveal' })
+  },
+})
+
+async function requirePlayer(ctx, token, game) {
+  const student = await requireGameStudent(ctx, token, game)
+  const player = await ctx.db
+    .query('gamePlayers')
+    .withIndex('by_game_student', (q) => q.eq('gameId', game._id).eq('studentId', student._id))
+    .unique()
+  if (!player) throw new ConvexError("Avval o'yinga qo'shiling")
+  return player
+}
+
+/** Student: 50/50 — hides two wrong options of the open question. Once per game. */
+export const fiftyFifty = mutation({
+  args: { token: v.string(), gameId: v.id('games'), questionIndex: v.number() },
+  handler: async (ctx, { token, gameId, questionIndex }) => {
+    const game = await getGameOrThrow(ctx, gameId)
+    const player = await requirePlayer(ctx, token, game)
+    if (game.status !== 'question' || game.currentIndex !== questionIndex) throw new ConvexError('Bu savol yopilgan')
+    if (player.fiftyAt !== undefined) throw new ConvexError('50/50 allaqachon ishlatilgan')
+    const answers = await getAnswersFor(ctx, gameId, questionIndex)
+    if (answers.some((a) => a.playerId === player._id)) throw new ConvexError('Siz allaqachon javob bergansiz')
+
+    const question = await ctx.db.get(game.questionIds[questionIndex])
+    if (!question) throw new ConvexError('Savol topilmadi')
+    const wrong = question.options.map((_, i) => i).filter((i) => i !== question.correctIndex)
+    const hidden = []
+    while (hidden.length < Math.min(2, wrong.length - 1)) {
+      const pick = wrong.splice(Math.floor(Math.random() * wrong.length), 1)[0]
+      hidden.push(pick)
+    }
+    await ctx.db.patch(player._id, { fiftyAt: questionIndex, fiftyHidden: hidden.sort() })
+    return hidden
+  },
+})
+
+const REACTION_COOLDOWN_MS = 700
+
+/** Student: fire an emoji reaction that floats across every screen of the game. */
+export const react = mutation({
+  args: { token: v.string(), gameId: v.id('games'), emoji: v.string() },
+  handler: async (ctx, { token, gameId, emoji }) => {
+    if (!GAME_REACTIONS.includes(emoji)) return
+    const game = await getGameOrThrow(ctx, gameId)
+    if (game.status === 'finished' && game.endedAt && Date.now() - game.endedAt > 10 * 60 * 1000) return
+    const player = await requirePlayer(ctx, token, game)
+    const now = Date.now()
+    const recent = await ctx.db
+      .query('gameReactions')
+      .withIndex('by_game', (q) => q.eq('gameId', gameId).gt('createdAt', now - REACTION_COOLDOWN_MS))
+      .collect()
+    if (recent.some((r) => r.playerId === player._id)) return
+    await ctx.db.insert('gameReactions', { gameId, playerId: player._id, emoji, createdAt: now })
   },
 })
 
@@ -304,12 +378,14 @@ export const getState = query({
         fullName: students[i]?.fullName ?? "O'quvchi",
         team: p.team,
         hero: p.hero ?? null,
+        photoUrl: students[i]?.avatar ?? null,
         joinedAt: p.joinedAt,
         score: p.score,
         streak: p.streak,
         correctCount: p.correctCount,
         answered: answerByPlayer.has(p._id),
         lastPoints: game.status === 'reveal' ? (answerByPlayer.get(p._id)?.points ?? 0) : null,
+        lastBoost: game.status === 'reveal' ? (answerByPlayer.get(p._id)?.boost ?? null) : null,
       }))
       .sort((a, b) => b.score - a.score || a.fullName.localeCompare(b.fullName))
       .map((p, i) => ({ ...p, rank: i + 1 }))
@@ -354,17 +430,49 @@ export const getState = query({
       const best = answers.filter((a) => a.correct).sort((a, b) => a.elapsedMs - b.elapsedMs)[0]
       if (best) {
         const p = leaderboard.find((x) => x.playerId === best.playerId)
-        fastest = { fullName: p?.fullName ?? '', seconds: Math.round(best.elapsedMs / 100) / 10 }
+        fastest = {
+          fullName: p?.fullName ?? '',
+          hero: p?.hero ?? null,
+          photoUrl: p?.photoUrl ?? null,
+          playerId: best.playerId,
+          seconds: Math.round(best.elapsedMs / 100) / 10,
+        }
       }
     }
 
+    const reactionRows = await ctx.db
+      .query('gameReactions')
+      .withIndex('by_game', (q) => q.eq('gameId', gameId))
+      .order('desc')
+      .take(24)
+    const reactions = reactionRows
+      .map((r) => {
+        const p = leaderboard.find((x) => x.playerId === r.playerId)
+        return p
+          ? { id: r._id, emoji: r.emoji, playerId: r.playerId, fullName: p.fullName, hero: p.hero, photoUrl: p.photoUrl, team: p.team }
+          : null
+      })
+      .filter(Boolean)
+      .reverse()
+
     let me = null
+    let myPhotoUrl = null
     if (viewer.role === 'player') {
+      const myStudent = await ctx.db.get(viewer.studentId)
+      myPhotoUrl = myStudent?.avatar ?? null
       const mine = leaderboard.find((p) => p.studentId === viewer.studentId)
       if (mine) {
         const myAnswer = answerByPlayer.get(mine.playerId)
+        const row = players.find((p) => p._id === mine.playerId)
         me = {
           ...mine,
+          powerUps: {
+            fifty: row?.fiftyAt === undefined,
+            double: row?.doubleAt === undefined,
+            shield: row?.shieldAt === undefined,
+          },
+          fiftyHidden: row?.fiftyAt === game.currentIndex ? (row.fiftyHidden ?? []) : [],
+          boost: myAnswer?.boost ?? null,
           answer: myAnswer
             ? {
                 selectedIndex: myAnswer.selectedIndex,
@@ -396,6 +504,8 @@ export const getState = query({
       leaderboard,
       teams,
       me,
+      myPhotoUrl,
+      reactions,
     }
   },
 })

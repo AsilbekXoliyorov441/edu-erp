@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ListChecks, Users2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Clock, ListChecks, Users2 } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
@@ -11,10 +11,13 @@ import { LessonSessionPanel } from '@/widgets/LessonSessionPanel/LessonSessionPa
 import { LessonsList } from '@/widgets/LessonsList/LessonsList'
 import { AttendanceHistory } from '@/widgets/AttendanceHistory/AttendanceHistory'
 import { AddStudentDialog } from '@/features/add-student/ui/AddStudentDialog'
-import { RenameGroupDialog } from '@/features/rename-group/ui/RenameGroupDialog'
+import { RemovedStudentsList } from '@/features/restore-student/ui/RemovedStudentsList'
+import { EditGroupDialog } from '@/features/edit-group/ui/EditGroupDialog'
 import { DeleteGroupDialog } from '@/features/remove-group/ui/DeleteGroupDialog'
 import { StartLessonDialog } from '@/features/give-coin/ui/StartLessonDialog'
 import { useGroupStore } from '@/entities/group/model/store'
+import { formatGroupSchedule } from '@/entities/group/model/options'
+import { GroupIcon } from '@/entities/group/ui/GroupIcon'
 import { useStudentStore } from '@/entities/student/model/store'
 import { useLessonStore } from '@/entities/lesson/model/store'
 import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
@@ -140,11 +143,28 @@ export function GroupDetailPage() {
             </Link>
           </Button>
           <div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              <GroupIcon direction={group.direction} className="size-8 rounded-xl" iconClassName="size-4" />
               <h2 className="text-lg font-semibold text-foreground">{group.name}</h2>
-              <RenameGroupDialog group={group} />
+              <EditGroupDialog group={group} />
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
+              {formatGroupSchedule(group) ? (
+                <Badge variant="outline" className="gap-1">
+                  <Clock className="size-3" /> {formatGroupSchedule(group)}
+                </Badge>
+              ) : (
+                <EditGroupDialog
+                  group={group}
+                  trigger={
+                    <button type="button" className="cursor-pointer">
+                      <Badge variant="outline" className="gap-1 border-amber-300 text-amber-700 dark:border-amber-500/40 dark:text-amber-300">
+                        <AlertTriangle className="size-3" /> Dars kunlarini belgilang
+                      </Badge>
+                    </button>
+                  }
+                />
+              )}
               <Badge variant="secondary">{stats.studentCount} o'quvchi</Badge>
               <Badge variant="secondary">{stats.lessonCount} dars</Badge>
               <Badge variant="coin">{stats.avgCoins} o'rtacha coin</Badge>
@@ -154,6 +174,7 @@ export function GroupDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <AddStudentDialog group={group} />
           <StartLessonDialog
+            group={group}
             lessons={groupLessons}
             disabled={groupStudents.length === 0}
             onStart={(date) => {
@@ -176,6 +197,10 @@ export function GroupDetailPage() {
           <Card>
             <CardContent className="p-5">
               <StudentRosterTable students={groupStudents} transactions={transactions} />
+              <RemovedStudentsList
+                students={students.filter((s) => s.groupId === group.id && s.status === STUDENT_STATUS.REMOVED)}
+                transactions={transactions}
+              />
             </CardContent>
           </Card>
         </TabsContent>

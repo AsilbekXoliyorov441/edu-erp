@@ -1,5 +1,6 @@
 import { useId } from 'react'
-import { ArrowUpToLine, Check, Clock, RotateCcw, Search, Sparkles, UserCheck, X } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowUpToLine, Check, Clock, Minus, Plus, RotateCcw, Search, Sparkles, UserCheck, X } from 'lucide-react'
 import { COIN_CATEGORY_LIST } from '@/shared/config/constants'
 import { LESSON_MAX_COINS } from '@/shared/lib/stats/monthlyGoal'
 import { cn } from '@/shared/lib/utils'
@@ -147,7 +148,9 @@ function HeaderRow({ onColumnMax }) {
         <div key={category.key} role="columnheader" className="flex items-center justify-between pr-[4px]">
           <div className="flex flex-col">
             <span className="text-[var(--cs-text-2)]">{category.label}</span>
-            <span className="text-[11.5px] font-medium text-[var(--cs-faint)]">0–{category.max} ball</span>
+            <span className="text-[11.5px] font-medium text-[var(--cs-faint)]">
+              {category.input === 'counter' ? `to'g'ri javob +1 · max ${category.max}` : `0–${category.max} ball`}
+            </span>
           </div>
           <button
             type="button"
@@ -204,6 +207,96 @@ function ScoreSegment({ studentName, category, value, disabled, onChange }) {
           </button>
         )
       })}
+    </div>
+  )
+}
+
+/** Q&A grading: +1 gives this student the current question (the tracker above the table
+ * counts questions), "−" takes their latest point back. Filled dots show which question
+ * numbers the student answered ("✓" for points given via "Max"). */
+function ScoreCounter({ studentName, category, value, questions, currentQuestion, disabled, onIncrement, onDecrement }) {
+  const count = value ?? 0
+  const atMax = count >= category.max
+  const btn =
+    'cs-focus flex h-[40px] shrink-0 items-center justify-center rounded-[9px] transition-colors disabled:cursor-not-allowed'
+
+  return (
+    <div
+      role="group"
+      aria-label={`${studentName}: ${category.label}`}
+      className={cn(
+        'inline-flex items-center gap-[6px] rounded-[11px] border border-[var(--cs-border)] p-[3px]',
+        disabled ? 'bg-[var(--cs-segment-absent)]' : 'bg-[var(--cs-surface-muted)]',
+      )}
+    >
+      <button
+        type="button"
+        disabled={disabled || count === 0}
+        onClick={onDecrement}
+        aria-label={`${studentName}: ${category.label} — 1 ball ayirish`}
+        title="Adashib bosgan bo'lsangiz, 1 ball ayiring"
+        className={cn(
+          btn,
+          'w-[34px] cursor-pointer text-[var(--cs-text-3)] hover:bg-[var(--cs-score-hover)] disabled:text-[var(--cs-disabled)] disabled:hover:bg-transparent',
+        )}
+      >
+        <Minus size={16} strokeWidth={2.6} aria-hidden="true" />
+      </button>
+
+      <div
+        className="flex items-center gap-[3px]"
+        aria-live="polite"
+        aria-label={`${count} ta to'g'ri javob${questions.length ? `: ${questions.join(', ')}-savollar` : ''}`}
+      >
+        {Array.from({ length: category.max }, (_, i) => {
+          const filled = i < count
+          return filled ? (
+            <motion.span
+              key={`on-${i}-${questions[i] ?? 'max'}`}
+              title={questions[i] ? `${questions[i]}-savolga javob bergan` : "Max orqali qo'yilgan"}
+              initial={{ scale: 0.4 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 520, damping: 18 }}
+              className="flex size-[22px] items-center justify-center rounded-full bg-[var(--cs-accent)] text-[10.5px] font-extrabold tracking-tight text-[var(--cs-on-accent)]"
+            >
+              {questions[i] ?? <Check size={11} strokeWidth={3.5} aria-hidden="true" />}
+            </motion.span>
+          ) : (
+            <span
+              key={`off-${i}`}
+              className={cn(
+                'size-[22px] rounded-full border-2 border-dashed',
+                disabled ? 'border-[var(--cs-disabled)] opacity-40' : 'border-[var(--cs-border-input)]',
+              )}
+            />
+          )
+        })}
+      </div>
+
+      <button
+        type="button"
+        disabled={disabled || atMax}
+        onClick={onIncrement}
+        aria-label={`${studentName}: ${currentQuestion}-savolga to'g'ri javob, +1 ball`}
+        title={atMax ? 'Maksimal ball' : `${currentQuestion}-savolga to'g'ri javob: +1 ball`}
+        className={cn(
+          btn,
+          'w-[52px] gap-[1px] text-[14px] font-extrabold',
+          disabled
+            ? 'text-[var(--cs-disabled)]'
+            : atMax
+              ? 'bg-[var(--cs-accent-soft)] text-[var(--cs-accent-dark)]'
+              : 'cursor-pointer bg-[var(--cs-accent)] text-[var(--cs-on-accent)] shadow-[0_1px_2px_rgba(15,23,42,.18)] hover:brightness-110 active:scale-95',
+        )}
+      >
+        {atMax ? (
+          <Check size={16} strokeWidth={3} aria-hidden="true" />
+        ) : (
+          <>
+            <Plus size={14} strokeWidth={3} aria-hidden="true" />1
+          </>
+        )}
+      </button>
     </div>
   )
 }
@@ -318,13 +411,26 @@ function StudentRow({ index, student, status, scores, total, ungraded, goalPerce
 
       {COIN_CATEGORY_LIST.map((category) => (
         <div key={category.key} role="cell">
-          <ScoreSegment
-            studentName={name}
-            category={category}
-            value={scores?.[category.key] ?? null}
-            disabled={isAbsent}
-            onChange={(value) => session.setScore(student.id, category.key, value)}
-          />
+          {category.input === 'counter' ? (
+            <ScoreCounter
+              studentName={name}
+              category={category}
+              value={scores?.[category.key] ?? null}
+              questions={session.answeredQuestions(student.id)}
+              currentQuestion={session.currentQuestion}
+              disabled={isAbsent}
+              onIncrement={() => session.creditAnswer(student.id)}
+              onDecrement={() => session.removeCredit(student.id)}
+            />
+          ) : (
+            <ScoreSegment
+              studentName={name}
+              category={category}
+              value={scores?.[category.key] ?? null}
+              disabled={isAbsent}
+              onChange={(value) => session.setScore(student.id, category.key, value)}
+            />
+          )}
         </div>
       ))}
 

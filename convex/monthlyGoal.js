@@ -45,7 +45,8 @@ export const closeMonth = internalMutation({
       coinEntries.push(...(await ctx.db.query('coinEntries').withIndex('by_lesson', byLesson).collect()))
     }
 
-    const progress = computeMonthlyProgress({ monthKey, lessons, attendance, coinEntries })
+    const groups = (await ctx.db.query('groups').collect()).map((g) => ({ id: g._id, schedule: g.schedule }))
+    const progress = computeMonthlyProgress({ monthKey, lessons, attendance, coinEntries, groups })
     const alreadyClosed = new Set(
       (await ctx.db.query('monthlyGoalResults').withIndex('by_month', (q) => q.eq('month', monthKey)).collect()).map(
         (r) => r.studentId,

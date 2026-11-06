@@ -6,6 +6,7 @@ const q = (text, options, correctIndex, isCode = false) => ({ text, options, cor
 export const PRESET_TESTS = [
   {
     title: 'HTML',
+    subject: 'html',
     questions: [
       q('HTML qisqartmasi nimani anglatadi?', ['Hyper Text Markup Language', 'High Tech Modern Language', 'Hyperlink and Text Management Language', 'Home Tool Markup Language'], 0),
       q('Eng katta sarlavha qaysi teg bilan yoziladi?', ['<head>', '<h6>', '<h1>', '<heading>'], 2),
@@ -31,6 +32,7 @@ export const PRESET_TESTS = [
   },
   {
     title: 'CSS',
+    subject: 'css',
     questions: [
       q('CSS qisqartmasi nimani anglatadi?', ['Computer Style Sheets', 'Cascading Style Sheets', 'Creative Style System', 'Colorful Style Sheets'], 1),
       q('Matn rangini o\'zgartirish uchun qaysi xususiyat ishlatiladi?', ['font-color', 'text-color', 'color', 'background-color'], 2),
@@ -56,6 +58,7 @@ export const PRESET_TESTS = [
   },
   {
     title: 'HTML + CSS',
+    subject: 'html_css',
     questions: [
       q('CSS faylni HTML\'ga ulashning to\'g\'ri usuli qaysi?', ['<style src="style.css">', '<link rel="stylesheet" href="style.css">', '<css href="style.css">', '<script href="style.css">'], 1),
       q('<link> tegi odatda qayerga yoziladi?', ['<body> oxiriga', '<footer> ichiga', '<head> ichiga', '<html> tashqarisiga'], 2),
@@ -80,7 +83,34 @@ export const PRESET_TESTS = [
     ],
   },
   {
+    title: 'HTML + CSS 2-qism',
+    subject: 'html_css',
+    questions: [
+      q('Sahifaning asosiy (yagona) kontenti uchun qaysi semantik teg ishlatiladi?', ['<section>', '<main>', '<article>', '<body>'], 1),
+      q('Navigatsiya havolalari guruhi uchun qaysi semantik teg mo\'ljallangan?', ['<menu>', '<links>', '<nav>', '<header>'], 2),
+      q('Formadagi <label> ni input bilan bog\'lash uchun qaysi atribut ishlatiladi?', ['for', 'name', 'bind', 'link'], 0),
+      q('Input maydonini to\'ldirish majburiy qilish uchun qaysi atribut qo\'shiladi?', ['validate', 'needed', 'mandatory', 'required'], 3),
+      q('Input ichida kulrang yordamchi matn ko\'rsatish uchun qaysi atribut ishlatiladi?', ['value', 'placeholder', 'hint', 'title'], 1),
+      q('Ochiladigan ro\'yxat (dropdown) qaysi teglar bilan yaratiladi?', ['<list> va <item>', '<dropdown> va <option>', '<select> va <option>', '<ul> va <li>'], 2),
+      q('Quyidagi kodda havola bosilganda nima bo\'ladi?\n\n<a href="#contact">Aloqa</a>\n...\n<section id="contact">...</section>', ['Yangi sahifa ochiladi', 'Sahifa id="contact" bo\'lgan bo\'limga o\'tadi', 'Hech narsa bo\'lmaydi', 'contact.html fayli ochiladi'], 1, true),
+      q('Jadvalda katakni 2 ta ustunga cho\'zish uchun qaysi atribut ishlatiladi?', ['rowspan="2"', 'merge="2"', 'colspan="2"', 'span="2"'], 2),
+      q('Quyidagi kodda .box elementi qanday ko\'rinadi?\n\n.box {\n  visibility: hidden;\n}', ['Ko\'rinmaydi, lekin joyi saqlanadi', 'Ko\'rinmaydi va joy egallamaydi', 'Yarim shaffof bo\'ladi', 'DOMdan o\'chiriladi'], 0, true),
+      q('Elementni yarim shaffof qilish uchun qaysi xususiyat ishlatiladi?', ['transparent: 0.5', 'visibility: 0.5', 'filter: 0.5', 'opacity: 0.5'], 3),
+      q('Qaysi elementlar ustma-ust tushganda qaysi biri yuqorida turishini qaysi xususiyat belgilaydi?', ['z-index', 'layer', 'order', 'stack'], 0),
+      q('position: fixed element nimaga nisbatan joylashadi?', ['Ota elementga', 'Brauzer oynasiga (scroll qilganda ham joyida qoladi)', 'O\'zining asl joyiga', 'body ning boshiga'], 1),
+      q('position: sticky ishlashi uchun qaysi xususiyat ham berilishi kerak?', ['z-index', 'display: block', 'top (yoki left/right/bottom)', 'overflow: hidden'], 2),
+      q('Flexbox\'da elementlarni ustun (vertikal) bo\'ylab joylashtirish uchun nima yoziladi?', ['flex-direction: column', 'flex-direction: vertical', 'align-items: column', 'flex-flow: down'], 0),
+      q('Quyidagi kod elementni qanday joylashtiradi?\n\n.parent {\n  display: flex;\n  justify-content: center;\n  align-items: center;\n}', ['Faqat gorizontal markazga', 'Faqat vertikal markazga', 'Chap yuqori burchakka', 'Ham gorizontal, ham vertikal markazga'], 3, true),
+      q('Flex elementlar sig\'may qolganda keyingi qatorga o\'tishi uchun nima yoziladi?', ['flex-wrap: wrap', 'flex-break: auto', 'overflow: wrap', 'white-space: wrap'], 0),
+      q('Flex yoki Grid elementlari orasidagi masofani qaysi xususiyat belgilaydi?', ['margin', 'spacing', 'gap', 'padding'], 2),
+      q('Quyidagi kodda havolaga sichqoncha kelganda nima bo\'ladi?\n\na {\n  color: blue;\n  transition: color 0.3s;\n}\na:hover {\n  color: red;\n}', ['Rang darhol qizilga o\'zgaradi', 'Rang 0.3 soniya davomida silliq qizilga o\'tadi', 'Rang 3 soniyada o\'zgaradi', 'Hech narsa o\'zgarmaydi'], 1, true),
+      q('Elementni 45 gradusga burish uchun nima yoziladi?', ['rotate: 45', 'transform: turn(45)', 'transform: rotate(45deg)', 'angle: 45deg'], 2),
+      q('Ro\'yxatdagi faqat birinchi <li> elementini tanlaydigan selektor qaysi?', ['li:first', 'li:first-child', 'li[1]', 'li:nth(1)'], 1),
+    ],
+  },
+  {
     title: 'Python 1-dars',
+    subject: 'python',
     questions: [
       q('Python dasturlash tilini kim yaratgan?', ['Bill Gates', 'Guido van Rossum', 'Mark Zuckerberg', 'Linus Torvalds'], 1),
       q('Ekranga matn chiqarish uchun qaysi buyruq ishlatiladi?', ['input()', 'show()', 'write()', 'print()'], 3),

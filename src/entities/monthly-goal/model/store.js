@@ -5,6 +5,7 @@ import { useAuthStore } from '@/entities/session/model/store'
 import { useLessonStore } from '@/entities/lesson/model/store'
 import { useAttendanceStore } from '@/entities/attendance/model/store'
 import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
+import { useGroupStore } from '@/entities/group/model/store'
 import { mapId } from '@/shared/lib/convex/mapId'
 import { computeMonthlyProgress, getMonthKey, isGoalMonth } from '@/shared/lib/stats/monthlyGoal'
 
@@ -20,11 +21,12 @@ export function useCurrentMonthGoal() {
   const lessons = useLessonStore((s) => s.items)
   const attendance = useAttendanceStore((s) => s.items)
   const coinEntries = useCoinEntryStore((s) => s.items)
+  const groups = useGroupStore((s) => s.items)
   const monthKey = getMonthKey()
 
   const progress = useMemo(
-    () => computeMonthlyProgress({ monthKey, lessons, attendance, coinEntries }),
-    [monthKey, lessons, attendance, coinEntries],
+    () => computeMonthlyProgress({ monthKey, lessons, attendance, coinEntries, groups }),
+    [monthKey, lessons, attendance, coinEntries, groups],
   )
 
   return { monthKey, active: isGoalMonth(monthKey), progress }

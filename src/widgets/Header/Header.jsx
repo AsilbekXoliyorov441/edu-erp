@@ -15,6 +15,7 @@ import { useThemeStore } from '@/shared/lib/store/themeStore'
 import { useBreadcrumbStore } from '@/shared/lib/store/breadcrumbStore'
 import { useAuthStore } from '@/entities/session/model/store'
 import { getInitials } from '@/entities/student/lib/getInitials'
+import { NotificationBell } from '@/widgets/Notifications/NotificationBell'
 import { ROLES, ROUTES, TENANT_ROLES } from '@/shared/config/constants'
 
 const PAGE_TITLES = {
@@ -22,6 +23,7 @@ const PAGE_TITLES = {
   [ROUTES.PLATFORM_ADMIN]: 'Markazlar',
   [ROUTES.GROUPS]: 'Guruhlar',
   [ROUTES.COIN_MARKET]: 'Coin Market',
+  [ROUTES.ORDERS]: 'Buyurtmalar',
   [ROUTES.LEADERBOARD]: 'Reyting',
   [ROUTES.SETTINGS]: 'Sozlamalar',
   [ROUTES.TESTS]: 'Testlar',
@@ -102,6 +104,7 @@ export function Header() {
       </nav>
 
       <div className="flex shrink-0 items-center gap-[8px]">
+        {role !== ROLES.PLATFORM_ADMIN && <NotificationBell />}
         <button
           type="button"
           onClick={toggleTheme}

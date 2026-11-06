@@ -22,6 +22,7 @@ import { getWeeklyBreakdown, getCategoryBreakdown } from '@/shared/lib/stats'
 import { LESSON_MAX_COINS, getStudentMonthlyHistory } from '@/shared/lib/stats/monthlyGoal'
 import { formatMonthKey } from '@/shared/lib/date'
 import { cn } from '@/shared/lib/utils'
+import { useGroupStore } from '@/entities/group/model/store'
 
 function MonthTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
@@ -64,7 +65,8 @@ function MonthTooltip({ active, payload }) {
 
 export function StudentCharts({ studentId, coinEntries, lessons, attendance }) {
   const weekly = getWeeklyBreakdown(studentId, coinEntries).slice(-8)
-  const monthly = getStudentMonthlyHistory(studentId, { lessons, attendance, coinEntries }).map((m) => ({
+  const groups = useGroupStore((s) => s.items)
+  const monthly = getStudentMonthlyHistory(studentId, { lessons, attendance, coinEntries, groups }).map((m) => ({
     ...m,
     label: formatMonthKey(m.monthKey),
   }))

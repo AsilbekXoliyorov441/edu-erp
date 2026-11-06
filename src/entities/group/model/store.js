@@ -12,8 +12,9 @@ export function useGroupStore(selector) {
 
   return selector({
     items,
-    create: (name) => createMutation({ token, name }),
-    update: (id, name) => updateMutation({ token, id, name }),
+    /** `fields`: { name, schedule, startTime, endTime, direction } */
+    create: (fields) => createMutation({ token, ...fields }),
+    update: (id, fields) => updateMutation({ token, id, ...fields }),
     remove: (id) => removeMutation({ token, id }),
   })
 }

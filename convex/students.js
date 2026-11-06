@@ -1,11 +1,21 @@
 import { query, mutation, internalQuery, internalMutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { getScopedGroupIdSet, requireGroupOwner, requireStudentOwner } from './lib/scoping'
+import { getScope, getScopedGroupIdSet, requireGroupOwner, requireStudentOwner } from './lib/scoping'
+
+/** Never send secrets to the client — only whether a purchase PIN is set. */
+function stripSecrets(student) {
+  const rest = { ...student, hasPurchasePin: Boolean(student.purchasePinHash) }
+  delete rest.passwordHash
+  delete rest.purchasePinHash
+  delete rest.pinFailedAttempts
+  delete rest.pinLockedUntil
+  delete rest.avatarStorageId
+  return rest
+}
 
 function stripCredentials(student) {
-  const rest = { ...student }
+  const rest = stripSecrets(student)
   delete rest.login
-  delete rest.passwordHash
   return rest
 }
 
@@ -27,11 +37,7 @@ export const listForTeacher = query({
     const groupIdSet = await getScopedGroupIdSet(ctx, token)
     const students = await ctx.db.query('students').collect()
     const scoped = students.filter((s) => groupIdSet.has(s.groupId))
-    return scoped.map((student) => {
-      const rest = { ...student }
-      delete rest.passwordHash
-      return rest
-    })
+    return scoped.map(stripSecrets)
   },
 })
 
@@ -187,5 +193,51 @@ export const transfer = mutation({
     }
 
     return { moved: studentIds.length, merged: duplicateByStudent.size, mergedCoins }
+  },
+})
+
+async function requireSelfStudent(ctx, token) {
+  const scope = await getScope(ctx, token)
+  if (scope.platformAdmin || scope.session.role !== 'student') throw new ConvexError("Faqat o'quvchi o'z rasmini yuklay oladi")
+  const student = await ctx.db.get(scope.session.userId)
+  if (!student) throw new ConvexError("O'quvchi topilmadi")
+  return student
+}
+
+/** Student: a short-lived URL to upload their own profile photo to. */
+export const generateAvatarUploadUrl = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireSelfStudent(ctx, token)
+    return await ctx.storage.generateUploadUrl()
+  },
+})
+
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+/** Student: set the uploaded file as their profile photo, replacing (and deleting) the old one. */
+export const setMyAvatar = mutation({
+  args: { token: v.string(), storageId: v.id('_storage') },
+  handler: async (ctx, { token, storageId }) => {
+    const student = await requireSelfStudent(ctx, token)
+    const meta = await ctx.db.system.get(storageId)
+    if (!meta) throw new ConvexError('Rasm topilmadi')
+    if (!meta.contentType?.startsWith('image/') || meta.size > MAX_AVATAR_BYTES) {
+      await ctx.storage.delete(storageId)
+      throw new ConvexError("Rasm 2 MB dan kichik bo'lishi kerak")
+    }
+    const url = await ctx.storage.getUrl(storageId)
+    if (student.avatarStorageId && student.avatarStorageId !== storageId) await ctx.storage.delete(student.avatarStorageId)
+    await ctx.db.patch(student._id, { avatar: url, avatarStorageId: storageId })
+    return url
+  },
+})
+
+export const removeMyAvatar = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const student = await requireSelfStudent(ctx, token)
+    if (student.avatarStorageId) await ctx.storage.delete(student.avatarStorageId)
+    await ctx.db.patch(student._id, { avatar: null, avatarStorageId: undefined })
   },
 })

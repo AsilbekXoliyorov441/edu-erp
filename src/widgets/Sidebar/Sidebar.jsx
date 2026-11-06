@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 import { useAuthStore } from '@/entities/session/model/store'
 import { NAV_ITEMS } from '@/widgets/Sidebar/navItems'
+import { useNavBadges } from '@/widgets/Sidebar/useNavBadges'
 
 function LogoMark() {
   return (
@@ -26,6 +27,7 @@ export function Sidebar() {
   const role = useAuthStore((s) => s.role)
   const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin)
   const items = NAV_ITEMS.filter((item) => item.roles.includes(role) && (!item.superAdminOnly || isSuperAdmin))
+  const badges = useNavBadges()
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col gap-[24px] border-r border-[var(--cs-border)] bg-[var(--cs-surface)] px-[14px] py-[20px] lg:flex">
@@ -56,6 +58,11 @@ export function Sidebar() {
           >
             <item.icon size={18} strokeWidth={2} className="shrink-0" />
             <span className="truncate">{item.label}</span>
+            {item.badge && badges[item.badge] > 0 && (
+              <span className="ml-auto flex h-[20px] min-w-[20px] items-center justify-center rounded-full bg-[var(--cs-danger-fill)] px-[6px] text-[11px] font-bold text-white tabular-nums">
+                {badges[item.badge] > 99 ? '99+' : badges[item.badge]}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

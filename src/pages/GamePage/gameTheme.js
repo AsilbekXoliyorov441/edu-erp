@@ -1,5 +1,5 @@
 import { Circle, Diamond, Square, Triangle } from 'lucide-react'
-import { GAME_HEROES, GAME_TEAMS } from '@/shared/config/constants'
+import { GAME_HEROES, GAME_TEAMS, PHOTO_HERO_ID } from '@/shared/config/constants'
 
 /** One color + shape + letter per answer slot, so options are recognisable at a glance (and
  * without relying on color alone). */
@@ -21,6 +21,16 @@ export function heroOf(heroId, fallbackKey = '') {
   let hash = 0
   for (const ch of fallbackKey) hash = (hash * 31 + ch.charCodeAt(0)) | 0
   return GAME_HEROES[Math.abs(hash) % GAME_HEROES.length]
+}
+
+/** True when this player plays with their own profile photo (and it still exists). */
+export function usesPhoto(heroId, photoUrl) {
+  return heroId === PHOTO_HERO_ID && !!photoUrl
+}
+
+/** "Sher" for a hero, null for a photo player. */
+export function heroName(heroId, photoUrl, fallbackKey) {
+  return usesPhoto(heroId, photoUrl) ? null : heroOf(heroId, fallbackKey).name
 }
 
 const LAST_HERO_KEY = 'coin-system:last-hero'

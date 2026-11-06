@@ -22,11 +22,11 @@ import {
 } from 'lucide-react'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { AnimatedNumber } from '@/shared/ui/animated-number'
-import { playSound, unlockAudio } from '@/shared/lib/sound/gameSounds'
+import { playSound, setMusic, unlockAudio } from '@/shared/lib/sound/gameSounds'
 import { useGameActions, useGameState, useQuestionClock, useServerClockOffset } from '@/entities/game/model/store'
-import { ROUTES } from '@/shared/config/constants'
+import { PHOTO_HERO_ID, ROUTES } from '@/shared/config/constants'
 import { cn } from '@/shared/lib/utils'
-import { OPTION_STYLES, heroOf, readLastHero, saveLastHero, teamOf } from '@/pages/GamePage/gameTheme'
+import { OPTION_STYLES, heroName, readLastHero, saveLastHero, teamOf } from '@/pages/GamePage/gameTheme'
 import {
   Confetti,
   GameStage,
@@ -34,10 +34,14 @@ import {
   HeroPicker,
   LeadIn,
   Leaderboard,
+  OnFireBanner,
   OptionTiles,
   Podium,
+  PowerUpBar,
   QuestionCard,
   QuestionDots,
+  ReactionBar,
+  ReactionLayer,
   SoundToggle,
   StageCard,
   TeamStandings,
@@ -68,7 +72,15 @@ function useSoundOnce(key, name) {
   }, [key, name])
 }
 
-function StageHeader({ state, right }) {
+/** Background loop for this screen; silence when it unmounts. */
+function useMusic(kind) {
+  useEffect(() => {
+    setMusic(kind)
+  }, [kind])
+  useEffect(() => () => setMusic(null), [])
+}
+
+function StageHeader({ state, right, withMusic = false }) {
   const inQuestion = state.status === 'question' || state.status === 'reveal'
   return (
     <div className="mb-5 space-y-4">
@@ -104,7 +116,7 @@ function StageHeader({ state, right }) {
           <span className="flex items-center gap-1.5 rounded-xl bg-white/15 px-3 py-2 text-sm font-bold tabular-nums">
             <Users className="size-4" /> {state.leaderboard.length}
           </span>
-          <SoundToggle />
+          <SoundToggle withMusic={withMusic} />
           {right}
         </div>
       </div>
@@ -124,12 +136,7 @@ function PlayerBubble({ player, index, showTeam = false }) {
       transition={{ type: 'spring', stiffness: 400, damping: 20, delay: Math.min(index * 0.02, 0.3) }}
       className="flex items-center gap-2 rounded-full bg-white py-1 pr-3.5 pl-1 text-sm font-semibold text-gray-900 shadow-md"
     >
-      <HeroAvatar
-        heroId={player.hero}
-        fallbackKey={player.playerId}
-        size="sm"
-        teamColor={showTeam ? teamOf(player.team).color : undefined}
-      />
+      <HeroAvatar player={player} size="sm" teamColor={showTeam ? teamOf(player.team).color : undefined} />
       {player.fullName}
     </motion.span>
   )
@@ -164,12 +171,13 @@ function JoinAnnouncement({ players }) {
         >
           <div className="flex items-center gap-4 rounded-3xl bg-white px-6 py-4 text-gray-900 shadow-2xl">
             <motion.div animate={{ rotate: [0, -12, 12, 0], scale: [1, 1.15, 1] }} transition={{ duration: 0.8 }}>
-              <HeroAvatar heroId={latest.hero} fallbackKey={latest.playerId} size="lg" />
+              <HeroAvatar player={latest} size="lg" />
             </motion.div>
             <div className="text-left">
               <p className="text-2xl font-black">{latest.fullName}</p>
               <p className="font-semibold text-blue-600">
-                {heroOf(latest.hero, latest.playerId).name} sahnaga chiqdi! 🎉
+                {heroName(latest.hero, latest.photoUrl, latest.playerId) ? `${heroName(latest.hero, latest.photoUrl, latest.playerId)} bo'lib ` : ''}
+                sahnaga chiqdi! 🎉
               </p>
             </div>
           </div>
@@ -269,7 +277,9 @@ function RevealStats({ state }) {
       </span>
       {state.fastest && (
         <span className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-3 py-2 text-sm font-bold text-amber-950">
-          <Zap className="size-4 fill-current" /> Eng tez: {state.fastest.fullName} • {state.fastest.seconds} s
+          <Zap className="size-4 fill-current" />
+          <HeroAvatar player={state.fastest} size="xs" className="size-6" />
+          Eng tez: {state.fastest.fullName} • {state.fastest.seconds} s
         </span>
       )}
     </div>
@@ -364,7 +374,11 @@ function HostQuestion({ state, offset, onReveal, onNext, busy }) {
 
 function FinalResults({ state, highlightStudentId }) {
   const winnerTeam = state.mode === 'team' ? state.teams[0] : null
-  useSoundOnce(state.id, 'fanfare')
+  useSoundOnce(state.id, 'drumroll')
+  useEffect(() => {
+    const id = setTimeout(() => playSound('fanfare'), 1850)
+    return () => clearTimeout(id)
+  }, [state.id])
 
   return (
     <div className="relative space-y-8">
@@ -419,10 +433,17 @@ function HostView({ state, offset }) {
     lastCount.current = playerCount
   }, [playerCount, state.status])
 
+  const hostClock = useQuestionClock(state.questionStartedAt, state.durationSec, state.status === 'question', offset)
+  useMusic(
+    state.status === 'lobby' ? 'lobby' : state.status === 'question' && hostClock.phase === 'running' ? 'tension' : null,
+  )
+
   return (
     <GameStage className="min-h-[calc(100vh-9rem)]">
+      <ReactionLayer reactions={state.reactions} withSound />
       <StageHeader
         state={state}
+        withMusic
         right={
           state.status !== 'finished' && (
             <button
@@ -447,10 +468,10 @@ function HostView({ state, offset }) {
 
 /* ---------------------------------------------------------------- player ------------- */
 
-function PlayerLobby({ state, onChangeHero }) {
+function PlayerLobby({ state, onChangeHero, onReact }) {
   const me = state.me
   const team = me && state.mode === 'team' ? teamOf(me.team) : null
-  const hero = heroOf(me.hero, me.playerId)
+  const hero = heroName(me.hero, me.photoUrl, me.playerId)
 
   return (
     <div className="flex min-h-[55vh] flex-col items-center justify-center gap-6 text-center">
@@ -460,13 +481,19 @@ function PlayerLobby({ state, onChangeHero }) {
         transition={{ type: 'spring', stiffness: 260, damping: 13 }}
       >
         <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}>
-          <HeroAvatar heroId={me.hero} fallbackKey={me.playerId} size="xl" teamColor={team?.color} className="ring-8 ring-white/20" />
+          <HeroAvatar player={me} size="xl" teamColor={team?.color} className="ring-8 ring-white/20" />
         </motion.div>
       </motion.div>
       <div className="space-y-1">
         <p className="text-3xl font-black">Siz o'yindasiz! 🎉</p>
         <p className="text-white/80">
-          {me.fullName} • <b>{hero.name}</b>
+          {me.fullName}
+          {hero && (
+            <>
+              {' '}
+              • <b>{hero}</b>
+            </>
+          )}
         </p>
       </div>
       <button
@@ -474,7 +501,7 @@ function PlayerLobby({ state, onChangeHero }) {
         onClick={onChangeHero}
         className="cursor-pointer rounded-xl bg-white/15 px-4 py-2 text-sm font-bold transition-colors hover:bg-white/25"
       >
-        Qahramonni almashtirish
+        Avatarni almashtirish
       </button>
       {team && (
         <span className="rounded-full px-4 py-1.5 text-sm font-bold shadow-lg ring-2 ring-white/40" style={{ background: team.color }}>
@@ -493,6 +520,10 @@ function PlayerLobby({ state, onChangeHero }) {
           ))}
         </div>
         <p className="text-sm text-white/80">Ustoz o'yinni boshlashini kuting • {state.leaderboard.length} o'quvchi</p>
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs font-bold tracking-wider text-white/60 uppercase">Kutayotganlarga reaksiya yuboring</p>
+        <ReactionBar onReact={onReact} />
       </div>
     </div>
   )
@@ -524,15 +555,22 @@ function RankLine({ me }) {
   )
 }
 
-function PlayerReveal({ state }) {
+function PlayerReveal({ state, onReact }) {
   const { me, question } = state
   const answer = me?.answer
   const correct = !!answer?.correct
   const outcome = !answer ? 'none' : correct ? 'correct' : 'wrong'
+  const onFire = outcome === 'correct' && me.streak >= 3
+  const shielded = outcome === 'wrong' && me?.boost === 'shield'
 
   const climbed = me?.prevRank && me.prevRank > me.rank
-  const sound = outcome === 'correct' ? 'correct' : 'wrong'
+  const sound = outcome === 'correct' ? 'correct' : outcome === 'wrong' ? 'wrong' : null
   useSoundOnce(`${state.currentIndex}`, sound)
+  useEffect(() => {
+    if (!onFire && !shielded) return undefined
+    const id = setTimeout(() => playSound(onFire ? 'fire' : 'shield'), 900)
+    return () => clearTimeout(id)
+  }, [onFire, shielded, state.currentIndex])
   useEffect(() => {
     if (!climbed) return undefined
     const id = setTimeout(() => playSound('climb'), 700)
@@ -557,7 +595,7 @@ function PlayerReveal({ state }) {
             }
             transition={{ duration: 0.9 }}
           >
-            {me && <HeroAvatar heroId={me.hero} fallbackKey={me.playerId} size="lg" className="ring-4 ring-white/40" />}
+            {me && <HeroAvatar player={me} size="lg" className="ring-4 ring-white/40" />}
           </motion.div>
           <motion.span
             initial={{ scale: 0 }}
@@ -580,9 +618,23 @@ function PlayerReveal({ state }) {
         {outcome === 'correct' && (
           <motion.p initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="text-3xl font-black">
             +<AnimatedNumber value={answer.points} />
+            {me.boost === 'double' && (
+              <span className="ml-2 rounded-lg bg-amber-400 px-2 py-0.5 align-middle text-base text-amber-950">2× BOOST</span>
+            )}
           </motion.p>
         )}
-        {outcome === 'correct' && me.streak >= 2 && (
+        {onFire && <OnFireBanner streak={me.streak} />}
+        {shielded && (
+          <motion.p
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.6, type: 'spring' }}
+            className="flex items-center gap-1.5 rounded-full bg-sky-400 px-3 py-1 text-sm font-black text-sky-950"
+          >
+            🛡️ Qalqon seriyangizni saqlab qoldi!
+          </motion.p>
+        )}
+        {outcome === 'correct' && me.streak === 2 && (
           <motion.p
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
@@ -601,12 +653,17 @@ function PlayerReveal({ state }) {
         {me && <RankLine me={me} />}
       </div>
       <OptionTiles question={question} selectedIndex={answer?.selectedIndex ?? null} showCounts />
+      <ReactionBar onReact={onReact} />
     </motion.div>
   )
 }
 
-function PlayerQuestion({ state, offset, onAnswer }) {
+function PlayerQuestion({ state, offset, onAnswer, onFifty }) {
   const { me, question } = state
+  const [armedPick, setArmedPick] = useState(null)
+  const armed = armedPick?.questionIndex === state.currentIndex ? armedPick.boost : null
+  const [fiftyBusy, setFiftyBusy] = useState(false)
+  const hidden = me?.fiftyHidden ?? []
   const clock = useQuestionClock(state.questionStartedAt, state.durationSec, true, offset)
 
   // Optimistic pick, tagged with its question so it doesn't leak into the next one.
@@ -624,7 +681,7 @@ function PlayerQuestion({ state, offset, onAnswer }) {
     setPendingPick({ index, questionIndex: state.currentIndex })
     playSound('lock')
     try {
-      await onAnswer(index)
+      await onAnswer(index, armed)
     } catch (err) {
       setPendingPick(null)
       toast.error(err.data ?? 'Javob yuborilmadi')
@@ -644,6 +701,30 @@ function PlayerQuestion({ state, offset, onAnswer }) {
         </p>
       )}
       <QuestionCard question={question} />
+      {!answered && !timeUp && me?.powerUps && (
+        <PowerUpBar
+          available={me.powerUps}
+          armed={armed}
+          fiftyUsedNow={hidden.length > 0}
+          busy={fiftyBusy}
+          onArm={(boost) => {
+            if (boost) playSound('powerUp')
+            setArmedPick(boost ? { boost, questionIndex: state.currentIndex } : null)
+          }}
+          onFifty={async () => {
+            if (!me.powerUps.fifty || fiftyBusy) return
+            setFiftyBusy(true)
+            try {
+              await onFifty()
+              playSound('zap')
+            } catch (err) {
+              toast.error(err.data ?? 'Ishlamadi')
+            } finally {
+              setFiftyBusy(false)
+            }
+          }}
+        />
+      )}
       {answered ? (
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
@@ -659,6 +740,8 @@ function PlayerQuestion({ state, offset, onAnswer }) {
             {OPTION_STYLES[selected].letter}
           </span>
           <p className="text-2xl font-black">Javob qabul qilindi!</p>
+          {me?.boost === 'double' && <p className="rounded-full bg-amber-400 px-3 py-0.5 text-xs font-black text-amber-950">⚡ 2× ball faol</p>}
+          {me?.boost === 'shield' && <p className="rounded-full bg-sky-400 px-3 py-0.5 text-xs font-black text-sky-950">🛡️ Qalqon faol</p>}
           <p className="flex items-center gap-2 text-sm text-white/80">
             <Loader2 className="size-4 animate-spin" /> Boshqalarni kutyapmiz…
           </p>
@@ -666,13 +749,13 @@ function PlayerQuestion({ state, offset, onAnswer }) {
       ) : timeUp ? (
         <div className="rounded-3xl bg-white/10 p-8 text-center text-2xl font-black ring-1 ring-white/20">Vaqt tugadi ⏰</div>
       ) : (
-        <OptionTiles question={question} onSelect={pick} />
+        <OptionTiles question={question} onSelect={pick} hiddenIndices={hidden} />
       )}
     </motion.div>
   )
 }
 
-function PlayerFinished({ state }) {
+function PlayerFinished({ state, onReact }) {
   const me = state.me
   return (
     <div className="space-y-6">
@@ -687,7 +770,7 @@ function PlayerFinished({ state }) {
             animate={me.rank <= 3 ? { y: [0, -10, 0] } : undefined}
             transition={{ repeat: Infinity, duration: 1.4 }}
           >
-            <HeroAvatar heroId={me.hero} fallbackKey={me.playerId} size="lg" />
+            <HeroAvatar player={me} size="lg" />
           </motion.div>
           <p className="text-sm font-semibold text-gray-500">Sizning natijangiz</p>
           <p className="text-5xl font-black text-blue-600">{me.rank}-o'rin</p>
@@ -700,6 +783,7 @@ function PlayerFinished({ state }) {
         </motion.div>
       )}
       <FinalResults state={state} highlightStudentId={me?.studentId} />
+      {me && <ReactionBar onReact={onReact} />}
     </div>
   )
 }
@@ -713,9 +797,11 @@ function JoinWithHero({ state, onJoined }) {
       .filter((p) => p.hero && p.studentId !== state.me?.studentId)
       .map((p) => [p.hero, p.fullName.split(' ')[0]]),
   )
-  const preferred = [state.me?.hero, readLastHero()].find((id) => id && !takenBy.has(id)) ?? null
+  const photoUrl = state.myPhotoUrl
+  const available = (id) => id && (id === PHOTO_HERO_ID ? !!photoUrl : !takenBy.has(id))
+  const preferred = [state.me?.hero, readLastHero(), PHOTO_HERO_ID].find(available) ?? null
   const [picked, setPicked] = useState(null)
-  const selected = picked && !takenBy.has(picked) ? picked : preferred
+  const selected = available(picked) ? picked : preferred
 
   const [join, joining] = useAction(async () => {
     await actions.join(state.id, selected)
@@ -732,6 +818,7 @@ function JoinWithHero({ state, onJoined }) {
       onConfirm={join}
       busy={joining}
       confirmLabel={state.me ? 'Saqlash' : "O'yinga kirish"}
+      photoUrl={photoUrl}
     />
   )
 }
@@ -743,9 +830,11 @@ function PlayerView({ state, offset }) {
   const me = state.me
   const team = me && state.mode === 'team' ? teamOf(me.team) : null
   const picking = state.status !== 'finished' && (!me || (changingHero && state.status === 'lobby'))
+  const onReact = (emoji) => actions.react(state.id, emoji).catch(() => {})
 
   return (
     <GameStage className="mx-auto min-h-[calc(100vh-9rem)] max-w-3xl">
+      <ReactionLayer reactions={state.reactions} />
       <StageHeader
         state={state}
         right={
@@ -754,7 +843,7 @@ function PlayerView({ state, offset }) {
               className="flex h-10 items-center gap-2 rounded-xl py-1 pr-3 pl-1 text-sm font-black tabular-nums shadow"
               style={{ background: team?.color ?? 'rgba(255,255,255,0.95)', color: team ? '#fff' : '#2563eb' }}
             >
-              <HeroAvatar heroId={me.hero} fallbackKey={me.playerId} size="xs" />
+              <HeroAvatar player={me} size="xs" />
               <AnimatedNumber value={me.score} />
             </span>
           )
@@ -764,14 +853,21 @@ function PlayerView({ state, offset }) {
         <JoinWithHero state={state} onJoined={() => setChangingHero(false)} />
       ) : (
         <>
-          {state.status === 'lobby' && <PlayerLobby state={state} onChangeHero={() => setChangingHero(true)} />}
-          {state.status === 'question' && state.question && (
-            <PlayerQuestion state={state} offset={offset} onAnswer={(index) => actions.answer(state.id, state.currentIndex, index)} />
+          {state.status === 'lobby' && (
+            <PlayerLobby state={state} onChangeHero={() => setChangingHero(true)} onReact={onReact} />
           )}
-          {state.status === 'reveal' && state.question && <PlayerReveal state={state} />}
+          {state.status === 'question' && state.question && (
+            <PlayerQuestion
+              state={state}
+              offset={offset}
+              onAnswer={(index, boost) => actions.answer(state.id, state.currentIndex, index, boost)}
+              onFifty={() => actions.fiftyFifty(state.id, state.currentIndex)}
+            />
+          )}
+          {state.status === 'reveal' && state.question && <PlayerReveal state={state} onReact={onReact} />}
         </>
       )}
-      {state.status === 'finished' && <PlayerFinished state={state} />}
+      {state.status === 'finished' && <PlayerFinished state={state} onReact={onReact} />}
     </GameStage>
   )
 }

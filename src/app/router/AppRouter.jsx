@@ -14,6 +14,7 @@ import { GroupsPage } from '@/pages/GroupsPage/GroupsPage'
 import { GroupDetailPage } from '@/pages/GroupDetailPage/GroupDetailPage'
 import { StudentProfilePage } from '@/pages/StudentProfilePage/StudentProfilePage'
 import { CoinMarketPage } from '@/pages/CoinMarketPage/CoinMarketPage'
+import { OrdersPage } from '@/pages/OrdersPage/OrdersPage'
 import { LeaderboardPage } from '@/pages/LeaderboardPage/LeaderboardPage'
 import { SettingsPage } from '@/pages/SettingsPage/SettingsPage'
 import { TeachersDashboardPage } from '@/pages/TeachersDashboardPage/TeachersDashboardPage'
@@ -66,6 +67,7 @@ export function AppRouter() {
           />
           <Route path="oquvchi/:studentId" element={<StudentProfilePage />} />
           <Route path="coin-market" element={<CoinMarketPage />} />
+          <Route path="buyurtmalar" element={<OrdersPage />} />
           <Route path="reyting" element={<LeaderboardPage />} />
           <Route
             path="sozlamalar"

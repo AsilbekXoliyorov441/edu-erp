@@ -62,7 +62,8 @@ function tashkentDayOfMonth(value) {
 }
 
 /** Which weekly track a group follows, inferred from the weekdays its lessons were actually
- * held on (groups don't store a schedule). Defaults to Mon/Wed/Fri until it has lessons. */
+ * held on — a fallback for groups created before `groups.schedule` existed. Defaults to
+ * Mon/Wed/Fri until it has lessons. Prefer `getGroupSchedule`. */
 export function inferGroupSchedule(groupLessons) {
   let odd = 0
   let even = 0
@@ -72,6 +73,11 @@ export function inferGroupSchedule(groupLessons) {
     else if (LESSON_WEEKDAYS.even.includes(day)) even += 1
   })
   return even > odd ? 'even' : 'odd'
+}
+
+/** The group's weekly track: the one set on the group, otherwise inferred from its lessons. */
+export function getGroupSchedule(group, groupLessons = []) {
+  return group?.schedule ?? inferGroupSchedule(groupLessons)
 }
 
 function lastDayOfMonth(monthKey) {
@@ -102,14 +108,16 @@ export function countLessonDays(monthKey, schedule, fromDay = 1, toDay = lastDay
  *   the goal, since it stays in the total.
  *
  * `lessons` must be ALL lessons (any month) with `id`, `groupId` and `date` — older ones
- * are needed to infer each group's weekly track. Runs in the browser and in the cron. */
-export function computeMonthlyProgress({ monthKey, lessons, attendance, coinEntries, now = new Date() }) {
+ * are needed to infer the weekly track of groups that have no `schedule` set. `groups`
+ * (with `id` and `schedule`) supplies the tracks set on the groups themselves. Runs in the browser and in the cron. */
+export function computeMonthlyProgress({ monthKey, lessons, attendance, coinEntries, groups = [], now = new Date() }) {
+  const groupById = new Map(groups.map((g) => [g.id, g]))
   const lessonsByGroup = new Map()
   lessons.forEach((l) => {
     if (!lessonsByGroup.has(l.groupId)) lessonsByGroup.set(l.groupId, [])
     lessonsByGroup.get(l.groupId).push(l)
   })
-  const scheduleByGroup = new Map([...lessonsByGroup].map(([groupId, list]) => [groupId, inferGroupSchedule(list)]))
+  const scheduleByGroup = new Map([...lessonsByGroup].map(([groupId, list]) => [groupId, getGroupSchedule(groupById.get(groupId), list)]))
 
   const groupFirstMonth = new Map(
     [...lessonsByGroup].map(([groupId, list]) => [groupId, list.map((l) => getMonthKey(l.date)).sort()[0]]),
@@ -174,7 +182,7 @@ export function computeMonthlyProgress({ monthKey, lessons, attendance, coinEntr
 
 /** One student's results for every calendar month they had lessons in, oldest first —
  * the same numbers the goal uses, for the profile's month-by-month chart. */
-export function getStudentMonthlyHistory(studentId, { lessons, attendance, coinEntries }) {
+export function getStudentMonthlyHistory(studentId, { lessons, attendance, coinEntries, groups = [] }) {
   const lessonById = new Map(lessons.map((l) => [l.id, l]))
   const monthKeys = new Set()
   ;[...attendance, ...coinEntries].forEach((row) => {
@@ -184,7 +192,7 @@ export function getStudentMonthlyHistory(studentId, { lessons, attendance, coinE
   })
 
   return [...monthKeys].sort().map((monthKey) => {
-    const progress = computeMonthlyProgress({ monthKey, lessons, attendance, coinEntries }).get(studentId)
+    const progress = computeMonthlyProgress({ monthKey, lessons, attendance, coinEntries, groups }).get(studentId)
     return { monthKey, ...progress }
   })
 }

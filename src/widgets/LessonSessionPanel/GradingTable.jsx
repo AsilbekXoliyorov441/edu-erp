@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUpToLine, Check, Clock, Minus, Plus, RotateCcw, Search, Sparkles, UserCheck, X } from 'lucide-react'
+import { ArrowUpToLine, Check, Clock, RotateCcw, Search, Sparkles, UserCheck, X } from 'lucide-react'
 import { COIN_CATEGORY_LIST } from '@/shared/config/constants'
 import { LESSON_MAX_COINS } from '@/shared/lib/stats/monthlyGoal'
 import { cn } from '@/shared/lib/utils'
@@ -149,7 +149,7 @@ function HeaderRow({ onColumnMax }) {
           <div className="flex flex-col">
             <span className="text-[var(--cs-text-2)]">{category.label}</span>
             <span className="text-[11.5px] font-medium text-[var(--cs-faint)]">
-              {category.input === 'counter' ? `to'g'ri javob +1 · max ${category.max}` : `0–${category.max} ball`}
+              {category.input === 'cells' ? `har katak = 1 coin` : `0–${category.max} ball`}
             </span>
           </div>
           <button
@@ -211,92 +211,44 @@ function ScoreSegment({ studentName, category, value, disabled, onChange }) {
   )
 }
 
-/** Q&A grading: +1 gives this student the current question (the tracker above the table
- * counts questions), "−" takes their latest point back. Filled dots show which question
- * numbers the student answered ("✓" for points given via "Max"). */
-function ScoreCounter({ studentName, category, value, questions, currentQuestion, disabled, onIncrement, onDecrement }) {
-  const count = value ?? 0
-  const atMax = count >= category.max
-  const btn =
-    'cs-focus flex h-[40px] shrink-0 items-center justify-center rounded-[9px] transition-colors disabled:cursor-not-allowed'
-
+/** Q&A grading: one cell per question (1…max). Tap any cell to light it — each lit cell is
+ * 1 coin, so answering only question 4 lights only "4" and gives 1 coin. Tap again to undo. */
+function ScoreCells({ studentName, category, slots, disabled, onToggle }) {
   return (
     <div
       role="group"
-      aria-label={`${studentName}: ${category.label}`}
+      aria-label={`${studentName}: ${category.label} — ${slots.length} coin`}
       className={cn(
-        'inline-flex items-center gap-[6px] rounded-[11px] border border-[var(--cs-border)] p-[3px]',
+        'inline-flex gap-[4px] rounded-[11px] border border-[var(--cs-border)] p-[3px]',
         disabled ? 'bg-[var(--cs-segment-absent)]' : 'bg-[var(--cs-surface-muted)]',
       )}
     >
-      <button
-        type="button"
-        disabled={disabled || count === 0}
-        onClick={onDecrement}
-        aria-label={`${studentName}: ${category.label} — 1 ball ayirish`}
-        title="Adashib bosgan bo'lsangiz, 1 ball ayiring"
-        className={cn(
-          btn,
-          'w-[34px] cursor-pointer text-[var(--cs-text-3)] hover:bg-[var(--cs-score-hover)] disabled:text-[var(--cs-disabled)] disabled:hover:bg-transparent',
-        )}
-      >
-        <Minus size={16} strokeWidth={2.6} aria-hidden="true" />
-      </button>
-
-      <div
-        className="flex items-center gap-[3px]"
-        aria-live="polite"
-        aria-label={`${count} ta to'g'ri javob${questions.length ? `: ${questions.join(', ')}-savollar` : ''}`}
-      >
-        {Array.from({ length: category.max }, (_, i) => {
-          const filled = i < count
-          return filled ? (
-            <motion.span
-              key={`on-${i}-${questions[i] ?? 'max'}`}
-              title={questions[i] ? `${questions[i]}-savolga javob bergan` : "Max orqali qo'yilgan"}
-              initial={{ scale: 0.4 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 520, damping: 18 }}
-              className="flex size-[22px] items-center justify-center rounded-full bg-[var(--cs-accent)] text-[10.5px] font-extrabold tracking-tight text-[var(--cs-on-accent)]"
-            >
-              {questions[i] ?? <Check size={11} strokeWidth={3.5} aria-hidden="true" />}
-            </motion.span>
-          ) : (
-            <span
-              key={`off-${i}`}
-              className={cn(
-                'size-[22px] rounded-full border-2 border-dashed',
-                disabled ? 'border-[var(--cs-disabled)] opacity-40' : 'border-[var(--cs-border-input)]',
-              )}
-            />
-          )
-        })}
-      </div>
-
-      <button
-        type="button"
-        disabled={disabled || atMax}
-        onClick={onIncrement}
-        aria-label={`${studentName}: ${currentQuestion}-savolga to'g'ri javob, +1 ball`}
-        title={atMax ? 'Maksimal ball' : `${currentQuestion}-savolga to'g'ri javob: +1 ball`}
-        className={cn(
-          btn,
-          'w-[52px] gap-[1px] text-[14px] font-extrabold',
-          disabled
-            ? 'text-[var(--cs-disabled)]'
-            : atMax
-              ? 'bg-[var(--cs-accent-soft)] text-[var(--cs-accent-dark)]'
-              : 'cursor-pointer bg-[var(--cs-accent)] text-[var(--cs-on-accent)] shadow-[0_1px_2px_rgba(15,23,42,.18)] hover:brightness-110 active:scale-95',
-        )}
-      >
-        {atMax ? (
-          <Check size={16} strokeWidth={3} aria-hidden="true" />
-        ) : (
-          <>
-            <Plus size={14} strokeWidth={3} aria-hidden="true" />1
-          </>
-        )}
-      </button>
+      {Array.from({ length: category.max }, (_, i) => {
+        const n = i + 1
+        const on = slots.includes(n)
+        return (
+          <motion.button
+            key={n}
+            type="button"
+            disabled={disabled}
+            aria-pressed={on}
+            aria-label={`${studentName}: ${n}-savol ${on ? '— javob berdi (bekor qilish)' : '— javob berdi deb belgilash'}`}
+            title={on ? `${n}-savol: +1 coin (bosib bekor qiling)` : `${n}-savol: javob berdi`}
+            onClick={() => onToggle(n)}
+            whileTap={disabled ? undefined : { scale: 0.88 }}
+            className={cn(
+              'cs-focus flex h-[40px] w-[38px] items-center justify-center rounded-[8px] border text-[15px] transition-colors',
+              disabled
+                ? 'cursor-not-allowed border-transparent bg-transparent font-semibold text-[var(--cs-disabled)]'
+                : on
+                  ? 'cursor-pointer border-[var(--cs-accent)] bg-[var(--cs-accent)] font-extrabold text-[var(--cs-on-accent)] shadow-[0_1px_2px_rgba(15,23,42,.18)]'
+                  : 'cursor-pointer border-dashed border-[var(--cs-border-input)] bg-[var(--cs-surface)] font-semibold text-[var(--cs-faint)] opacity-70 hover:border-[var(--cs-accent)] hover:text-[var(--cs-accent-dark)] hover:opacity-100',
+            )}
+          >
+            {n}
+          </motion.button>
+        )
+      })}
     </div>
   )
 }
@@ -411,16 +363,13 @@ function StudentRow({ index, student, status, scores, total, ungraded, goalPerce
 
       {COIN_CATEGORY_LIST.map((category) => (
         <div key={category.key} role="cell">
-          {category.input === 'counter' ? (
-            <ScoreCounter
+          {category.input === 'cells' ? (
+            <ScoreCells
               studentName={name}
               category={category}
-              value={scores?.[category.key] ?? null}
-              questions={session.answeredQuestions(student.id)}
-              currentQuestion={session.currentQuestion}
+              slots={session.qaSlots[student.id] ?? []}
               disabled={isAbsent}
-              onIncrement={() => session.creditAnswer(student.id)}
-              onDecrement={() => session.removeCredit(student.id)}
+              onToggle={(n) => session.toggleQaSlot(student.id, n)}
             />
           ) : (
             <ScoreSegment

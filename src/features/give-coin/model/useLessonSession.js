@@ -6,8 +6,8 @@ import { useLessonStore } from '@/entities/lesson/model/store'
 const ATTENDED = new Set(['present', 'late'])
 
 const nullScores = () => Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, null]))
-const QA_CATEGORY = COIN_CATEGORY_LIST.find((c) => c.input === 'counter')
-const PICKED_CATEGORIES = COIN_CATEGORY_LIST.filter((c) => c.input !== 'counter')
+const QA_CATEGORY = COIN_CATEGORY_LIST.find((c) => c.input === 'cells')
+const PICKED_CATEGORIES = COIN_CATEGORY_LIST.filter((c) => c.input !== 'cells')
 const maxScores = () => Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, c.max]))
 
 /** Nothing is pre-selected: `null` means "not graded yet", which is different from 0. */
@@ -15,8 +15,8 @@ function emptyDraft(students) {
   return {
     scores: Object.fromEntries(students.map((s) => [s.id, nullScores()])),
     attendance: Object.fromEntries(students.map((s) => [s.id, null])),
-    // Q&A question log, in order: { q: question number, studentId | null (nobody answered) }.
-    qaLog: [],
+    // Q&A cells each student has lit, e.g. { [studentId]: [2, 4] } — every lit cell is 1 coin.
+    qaSlots: {},
   }
 }
 
@@ -33,16 +33,19 @@ export function useLessonSession({ group, students, date }) {
   const saveSession = useLessonStore((s) => s.saveSession)
   const { scores, attendance } = draft
 
-  const qaLog = draft.qaLog ?? []
+  const qaSlots = draft.qaSlots ?? {}
 
   const update = (fn) =>
     setDraft((prev) =>
-      fn({ scores: { ...prev.scores }, attendance: { ...prev.attendance }, qaLog: [...(prev.qaLog ?? [])] }),
+      fn({ scores: { ...prev.scores }, attendance: { ...prev.attendance }, qaSlots: { ...(prev.qaSlots ?? {}) } }),
     )
 
-  const qaScore = (next, studentId) => next.scores[studentId]?.[QA_CATEGORY.key] ?? 0
-  const setQaScore = (next, studentId, value) => {
-    next.scores[studentId] = { ...next.scores[studentId], [QA_CATEGORY.key]: Math.max(0, value) }
+  const fullSlots = () => Array.from({ length: QA_CATEGORY.max }, (_, i) => i + 1)
+
+  /** Lit cells are the source of truth for Q&A; the score is just how many are lit. */
+  const setQaSlots = (next, studentId, slots) => {
+    next.qaSlots[studentId] = slots
+    next.scores[studentId] = { ...next.scores[studentId], [QA_CATEGORY.key]: slots.length }
   }
 
   // Picking a score for a student with no attendance yet marks them present; absent students
@@ -62,62 +65,31 @@ export function useLessonSession({ group, students, date }) {
       next.attendance[studentId] = status
       if (status === 'absent') {
         next.scores[studentId] = nullScores()
-        next.qaLog = next.qaLog.map((e) => (e.studentId === studentId ? { ...e, studentId: null } : e))
+        delete next.qaSlots[studentId]
       }
       return next
     })
 
-  // ── Q&A question tracker: the app counts questions so the teacher doesn't have to. ──
-
-  /** The current question was answered correctly by this student: +1, then next question. */
-  const creditAnswer = (studentId) =>
+  /** Q&A cell `n` on/off for a student — each lit cell is 1 coin, in any order. */
+  const toggleQaSlot = (studentId, n) =>
     update((next) => {
       if (next.attendance[studentId] === 'absent') return next
-      if (qaScore(next, studentId) >= QA_CATEGORY.max) return next
       if (!next.attendance[studentId]) next.attendance[studentId] = 'present'
-      setQaScore(next, studentId, qaScore(next, studentId) + 1)
-      next.qaLog.push({ q: next.qaLog.length + 1, studentId })
+      const slots = next.qaSlots[studentId] ?? []
+      setQaSlots(
+        next,
+        studentId,
+        slots.includes(n) ? slots.filter((x) => x !== n) : [...slots, n].sort((x, y) => x - y),
+      )
       return next
     })
-
-  /** Nobody answered the current question — move on. */
-  const skipQuestion = () =>
-    update((next) => {
-      next.qaLog.push({ q: next.qaLog.length + 1, studentId: null })
-      return next
-    })
-
-  /** Undo the last question (and the point it gave, if any). */
-  const undoQuestion = () =>
-    update((next) => {
-      const last = next.qaLog.pop()
-      if (last?.studentId) setQaScore(next, last.studentId, qaScore(next, last.studentId) - 1)
-      return next
-    })
-
-  /** "−" on a student: take back their latest point; that question becomes unanswered. */
-  const removeCredit = (studentId) =>
-    update((next) => {
-      const score = qaScore(next, studentId)
-      if (score <= 0) return next
-      const credited = next.qaLog.filter((e) => e.studentId === studentId)
-      // Points beyond the logged ones came from "Max" — remove those first.
-      if (credited.length >= score) {
-        const last = credited.at(-1)
-        next.qaLog = next.qaLog.map((e) => (e === last ? { ...e, studentId: null } : e))
-      }
-      setQaScore(next, studentId, score - 1)
-      return next
-    })
-
-  /** Question numbers a student answered, in order. */
-  const answeredQuestions = (studentId) => qaLog.filter((e) => e.studentId === studentId).map((e) => e.q)
 
   /** Row sparkles: max in every category; "late" is kept, anything else becomes "present". */
   const fillRowMax = (studentId) =>
     update((next) => {
       if (next.attendance[studentId] !== 'late') next.attendance[studentId] = 'present'
       next.scores[studentId] = maxScores()
+      next.qaSlots[studentId] = fullSlots()
       return next
     })
 
@@ -126,7 +98,9 @@ export function useLessonSession({ group, students, date }) {
     const max = COIN_CATEGORY_LIST.find((c) => c.key === categoryKey).max
     update((next) => {
       students.forEach((s) => {
-        if (ATTENDED.has(next.attendance[s.id])) next.scores[s.id] = { ...next.scores[s.id], [categoryKey]: max }
+        if (!ATTENDED.has(next.attendance[s.id])) return
+        next.scores[s.id] = { ...next.scores[s.id], [categoryKey]: max }
+        if (categoryKey === QA_CATEGORY.key) next.qaSlots[s.id] = fullSlots()
       })
       return next
     })
@@ -147,6 +121,7 @@ export function useLessonSession({ group, students, date }) {
         if (next.attendance[s.id] === 'absent') return
         if (!next.attendance[s.id]) next.attendance[s.id] = 'present'
         next.scores[s.id] = maxScores()
+        next.qaSlots[s.id] = fullSlots()
       })
       return next
     })
@@ -157,7 +132,7 @@ export function useLessonSession({ group, students, date }) {
       students.forEach((s) => {
         next.scores[s.id] = nullScores()
       })
-      next.qaLog = []
+      next.qaSlots = {}
       return next
     })
 
@@ -169,7 +144,7 @@ export function useLessonSession({ group, students, date }) {
   }
 
   /** Not graded = attendance unmarked, or attended with a picked-score category still `null`.
-   * Counter categories (Savol-javob) start at 0 — a student who answered nothing is graded. */
+   * Cell categories (Savol-javob) start at 0 — a student who answered nothing is graded. */
   const isUngraded = (studentId) => {
     const status = attendance[studentId]
     if (!status) return true
@@ -211,13 +186,8 @@ export function useLessonSession({ group, students, date }) {
     attendance,
     setScore,
     setAttendance,
-    qaLog,
-    currentQuestion: qaLog.length + 1,
-    creditAnswer,
-    skipQuestion,
-    undoQuestion,
-    removeCredit,
-    answeredQuestions,
+    qaSlots,
+    toggleQaSlot,
     fillRowMax,
     fillColumnMax,
     markAllPresent,

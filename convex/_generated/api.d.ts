@@ -22,6 +22,7 @@ import type * as gifts from "../gifts.js";
 import type * as groups from "../groups.js";
 import type * as lessons from "../lessons.js";
 import type * as lib_authz from "../lib/authz.js";
+import type * as lib_learningLevel from "../lib/learningLevel.js";
 import type * as lib_notify from "../lib/notify.js";
 import type * as lib_passwords from "../lib/passwords.js";
 import type * as lib_presetTests from "../lib/presetTests.js";
@@ -37,6 +38,7 @@ import type * as teachersActions from "../teachersActions.js";
 import type * as testAssignments from "../testAssignments.js";
 import type * as testQuestions from "../testQuestions.js";
 import type * as tests from "../tests.js";
+import type * as town from "../town.js";
 import type * as transactions from "../transactions.js";
 
 import type {
@@ -60,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   groups: typeof groups;
   lessons: typeof lessons;
   "lib/authz": typeof lib_authz;
+  "lib/learningLevel": typeof lib_learningLevel;
   "lib/notify": typeof lib_notify;
   "lib/passwords": typeof lib_passwords;
   "lib/presetTests": typeof lib_presetTests;
@@ -75,6 +78,7 @@ declare const fullApi: ApiFromModules<{
   testAssignments: typeof testAssignments;
   testQuestions: typeof testQuestions;
   tests: typeof tests;
+  town: typeof town;
   transactions: typeof transactions;
 }>;
 

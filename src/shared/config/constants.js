@@ -13,8 +13,8 @@ export const TENANT_ROLES = {
 
 /** Fixed coin categories and their per-lesson max value — enforced across every coin input. */
 export const COIN_CATEGORIES = {
-  // `counter`: graded by tapping +1 per correct answer instead of picking a score directly.
-  savol_javob: { key: 'savol_javob', label: 'Savol-javob', max: 5, input: 'counter' },
+  // `cells`: one cell per question (1…max); every lit cell is 1 coin, in any order.
+  savol_javob: { key: 'savol_javob', label: 'Savol-javob', max: 5, input: 'cells' },
   uy_vazifasi: { key: 'uy_vazifasi', label: 'Uy vazifasi', max: 5 },
   /** No longer graded — kept only so lessons graded before the change still show their label. */
   sinf_ishi: { key: 'sinf_ishi', label: 'Sinf ishi', max: 2, retired: true },
@@ -79,6 +79,7 @@ export const ROUTES = {
   TEACHERS_DASHBOARD: '/teachers-dashboard',
   TEACHERS_MANAGEMENT: '/ustozlar',
   GAMES: '/oyinlar',
+  TOWN: '/oyinlar/shaharcha',
   GAME: '/oyinlar/:gameId',
   game: (id) => `/oyinlar/${id}`,
   TESTS: '/testlar',

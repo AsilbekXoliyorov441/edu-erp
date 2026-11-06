@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { ROUTES } from '@/shared/config/constants'
@@ -25,6 +26,9 @@ import { TakeTestPage } from '@/pages/TakeTestPage/TakeTestPage'
 import { GamesPage } from '@/pages/GamesPage/GamesPage'
 import { GamePage } from '@/pages/GamePage/GamePage'
 import { NotFoundPage } from '@/pages/NotFoundPage/NotFoundPage'
+
+// The 3D town pulls in three.js — load it only when someone opens it.
+const TownPage = lazy(() => import('@/pages/TownPage/TownPage'))
 
 export function AppRouter() {
   const location = useLocation()
@@ -95,6 +99,14 @@ export function AppRouter() {
           />
           <Route path="testlar" element={<TestsPage />} />
           <Route path="oyinlar" element={<GamesPage />} />
+          <Route
+            path="oyinlar/shaharcha"
+            element={
+              <Suspense fallback={<div className="py-20 text-center text-muted-foreground">Shaharcha yuklanmoqda…</div>}>
+                <TownPage />
+              </Suspense>
+            }
+          />
           <Route path="oyinlar/:gameId" element={<GamePage />} />
           <Route
             path="testlar/:testId"

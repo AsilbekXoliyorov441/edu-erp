@@ -370,6 +370,50 @@ const SOUNDS = {
     kick(ctx, { delay: t })
     crash(ctx, { delay: t, volume: 0.45 })
   },
+  /** Town: purchase — cash register "ka-ching" with coins. */
+  cash: (ctx) => {
+    noise(ctx, { type: 'bandpass', freq: 2500, q: 2, duration: 0.06, volume: 0.25, wet: 0 })
+    tone(ctx, { freq: midi(88), duration: 0.6, delay: 0.06, type: 'sine', volume: 0.22, wet: 0.4 })
+    tone(ctx, { freq: midi(93), duration: 0.7, delay: 0.1, type: 'sine', volume: 0.16, wet: 0.4 })
+    for (let i = 0; i < 7; i += 1) {
+      tone(ctx, { freq: 2600 + Math.random() * 1800, duration: 0.07, delay: 0.25 + i * 0.05 + Math.random() * 0.03, type: 'triangle', volume: 0.06, wet: 0.3 })
+    }
+  },
+  /** Town: a floor goes up — hammer hits, then a rising "done" chime. */
+  build: (ctx) => {
+    ;[0, 0.22, 0.44].forEach((d) => {
+      tone(ctx, { freq: 180, slideTo: 90, duration: 0.12, delay: d, volume: 0.5, attack: 0.001, wet: 0.2 })
+      noise(ctx, { type: 'bandpass', freq: 3200, q: 3, duration: 0.05, delay: d, volume: 0.3, wet: 0.2 })
+    })
+    noise(ctx, { type: 'lowpass', freq: 600, duration: 0.8, delay: 0.6, attack: 0.1, volume: 0.15, wet: 0.3 })
+    ;[67, 72, 76, 79].forEach((n, i) => tone(ctx, { freq: midi(n), duration: 0.3, delay: 0.75 + i * 0.07, type: 'triangle', volume: 0.12 }))
+  },
+  /** Town: engine start. */
+  engine: (ctx) => {
+    tone(ctx, { freq: 40, slideTo: 95, duration: 0.5, type: 'sawtooth', volume: 0.18, filter: 400, wet: 0.05 })
+    tone(ctx, { freq: 95, slideTo: 70, duration: 0.9, delay: 0.5, type: 'sawtooth', volume: 0.14, filter: 350, wet: 0.05 })
+    noise(ctx, { type: 'lowpass', freq: 300, duration: 1.2, volume: 0.15, wet: 0 })
+    tone(ctx, { freq: 420, duration: 0.15, delay: 1.2, type: 'square', volume: 0.06, filter: 1500 })
+    tone(ctx, { freq: 420, duration: 0.25, delay: 1.4, type: 'square', volume: 0.06, filter: 1500 })
+  },
+  /** Town: car horn — two detuned square tones, like a real "beep-beep". */
+  horn: (ctx) => {
+    ;[0, 0.28].forEach((d) =>
+      [415, 523].forEach((f) => tone(ctx, { freq: f, duration: 0.22, delay: d, type: 'square', volume: 0.06, attack: 0.01, filter: 2200, wet: 0.1 })),
+    )
+  },
+  /** Town: hit a curb / wall. */
+  bump: (ctx) => {
+    kick(ctx, { volume: 0.6 })
+    noise(ctx, { type: 'lowpass', freq: 1200, duration: 0.25, volume: 0.3, wet: 0.1 })
+    noise(ctx, { type: 'bandpass', freq: 4000, q: 2, duration: 0.12, delay: 0.03, volume: 0.12, wet: 0.1 })
+  },
+  /** Town: car door shut (passenger in / out). */
+  door: (ctx) => {
+    noise(ctx, { type: 'lowpass', freq: 700, duration: 0.18, volume: 0.45, attack: 0.003, wet: 0.15 })
+    tone(ctx, { freq: 120, slideTo: 70, duration: 0.15, volume: 0.4, attack: 0.002, wet: 0.1 })
+    noise(ctx, { type: 'highpass', freq: 3500, duration: 0.04, delay: 0.02, volume: 0.15, wet: 0 })
+  },
   /** Game over — brass fanfare, drums and a cheering crowd. */
   fanfare: (ctx) => {
     const seq = [
@@ -516,4 +560,72 @@ export function setMusic(kind) {
 
 export function setMusicIntensity(value) {
   musicIntensity = value
+}
+
+/* ------------------------------------------------------------------ engine ----------- */
+
+let engine = null
+
+/** Continuous engine sound for driving: two detuned oscillators through a lowpass, pitch and
+ * brightness follow speed and throttle (see `setEngine`). */
+export function startEngine() {
+  const ctx = getCtx()
+  if (!ctx || engine) return
+  const out = ctx.createGain()
+  out.gain.value = 0
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 350
+  filter.Q.value = 3
+  const a = ctx.createOscillator()
+  a.type = 'sawtooth'
+  a.frequency.value = 38
+  const b = ctx.createOscillator()
+  b.type = 'square'
+  b.frequency.value = 76
+  b.detune.value = 12
+  const bGain = ctx.createGain()
+  bGain.gain.value = 0.4
+  // A slow wobble so idle sounds like pistons, not a pure tone.
+  const lfo = ctx.createOscillator()
+  lfo.frequency.value = 9
+  const lfoGain = ctx.createGain()
+  lfoGain.gain.value = 3
+  lfo.connect(lfoGain).connect(a.frequency)
+  a.connect(filter)
+  b.connect(bGain).connect(filter)
+  filter.connect(out).connect(bus.sfx)
+  a.start()
+  b.start()
+  lfo.start()
+  engine = { ctx, out, filter, a, b, lfo }
+  setEngine(0, 0)
+}
+
+/** `speed01` 0..1 of top speed, `throttle01` 0..1 pedal. */
+export function setEngine(speed01, throttle01) {
+  if (!engine) return
+  const { ctx, out, filter, a, b, lfo } = engine
+  const t = ctx.currentTime
+  const muted = useSoundStore.getState().muted
+  // Fake gears: pitch climbs, drops a little at each shift, climbs again.
+  const gear = Math.min(4, Math.floor(speed01 * 5))
+  const inGear = speed01 * 5 - gear
+  const base = 38 + gear * 9 + inGear * 34 + throttle01 * 6
+  a.frequency.setTargetAtTime(base, t, 0.08)
+  b.frequency.setTargetAtTime(base * 2, t, 0.08)
+  lfo.frequency.setTargetAtTime(8 + base / 6, t, 0.1)
+  filter.frequency.setTargetAtTime(300 + speed01 * 900 + throttle01 * 700, t, 0.1)
+  out.gain.setTargetAtTime(muted ? 0 : 0.07 + throttle01 * 0.05 + speed01 * 0.04, t, 0.1)
+}
+
+export function stopEngine() {
+  if (!engine) return
+  const { ctx, out, a, b, lfo } = engine
+  out.gain.setTargetAtTime(0, ctx.currentTime, 0.1)
+  const stopAt = ctx.currentTime + 0.6
+  a.stop(stopAt)
+  b.stop(stopAt)
+  lfo.stop(stopAt)
+  engine = null
 }

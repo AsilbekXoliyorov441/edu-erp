@@ -6,7 +6,6 @@ import { useCurrentMonthGoal } from '@/entities/monthly-goal/model/store'
 import { formatGroupSchedule } from '@/entities/group/model/options'
 import { formatUzLongDate, getMonthLabel } from '@/shared/lib/date'
 import { useLessonSession } from '@/features/give-coin/model/useLessonSession'
-import { QuestionTracker } from './QuestionTracker'
 import { GradingTable } from '@/widgets/LessonSessionPanel/GradingTable'
 import { cn } from '@/shared/lib/utils'
 
@@ -209,8 +208,6 @@ export function LessonSessionPanel({ group, students, stats, nextLessonNumber, m
           <span className="text-[12.5px] text-[var(--cs-muted)]">o'rtacha {formatAverage(average)} / 10</span>
         </StatCard>
       </div>
-
-      <QuestionTracker session={session} students={students} />
 
       <GradingTable
         rows={rows}

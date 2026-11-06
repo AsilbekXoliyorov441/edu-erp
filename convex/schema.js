@@ -207,6 +207,133 @@ export default defineSchema({
     createdAt: v.number(),
   }).index('by_game', ['gameId', 'createdAt']),
 
+  /** "Shaharcha" town game. One town per center (`townKey` = center id). Town money is
+   * separate from coins on purpose — coins buy real gifts and must not be spent on virtual
+   * houses. */
+  townPlayers: defineTable({
+    townKey: v.string(),
+    userId: v.union(v.id('students'), v.id('teachers')),
+    nickname: v.string(),
+    nicknameLower: v.string(),
+    color: v.string(),
+    money: v.number(),
+    car: v.optional(v.object({ model: v.string(), color: v.string() })),
+    joinedAt: v.number(),
+    lastBonusAt: v.optional(v.number()),
+    taxiTrips: v.optional(v.number()),
+    taxiEarned: v.optional(v.number()),
+    /** Learning stats: questions answered correctly in the library / exams. */
+    learnCorrect: v.optional(v.number()),
+    learnEarned: v.optional(v.number()),
+    /** ms; a failed building exam can be retried after this. */
+    buildCooldownUntil: v.optional(v.number()),
+    /** Driving time ("fuel") left, in ms — earned by answering questions. */
+    driveMsLeft: v.optional(v.number()),
+    /** Set while driving: when fuel was last charged. */
+    driveTickAt: v.optional(v.number()),
+    /** Savings in the town bank and when interest was last settled. */
+    bankBalance: v.optional(v.number()),
+    bankAt: v.optional(v.number()),
+    /** Temporary boosts bought in the choyxona / supermarket / restaurant. */
+    scholarUntil: v.optional(v.number()),
+    driverUntil: v.optional(v.number()),
+    builderKits: v.optional(v.number()),
+    /** The player's car is listed on the market at this price. */
+    carSalePrice: v.optional(v.number()),
+    /** Islamic bank: interest-free loan outstanding, zakat given, last help from the fund. */
+    loan: v.optional(v.number()),
+    zakatPaid: v.optional(v.number()),
+    mudarabaProfit: v.optional(v.number()),
+    helpAt: v.optional(v.number()),
+  })
+    .index('by_town', ['townKey'])
+    .index('by_user', ['userId'])
+    .index('by_town_nickname', ['townKey', 'nicknameLower']),
+
+  /** An owned plot. Plots nobody bought have no row; positions/prices live in `TOWN_PLOTS`. */
+  townPlots: defineTable({
+    townKey: v.string(),
+    plotId: v.string(),
+    ownerId: v.id('townPlayers'),
+    floors: v.number(),
+    style: v.string(),
+    /** `BUILDING_KINDS` key (absent = house, for plots built before kinds existed). */
+    kind: v.optional(v.string()),
+    design: v.optional(v.string()),
+    /** Income is counted from here (shops / apartments / offices). */
+    lastCollectAt: v.optional(v.number()),
+    /** Listed on the market at this price (set by the owner). */
+    salePrice: v.optional(v.number()),
+    boughtAt: v.number(),
+    builtAt: v.optional(v.number()),
+  })
+    .index('by_town', ['townKey'])
+    .index('by_town_plot', ['townKey', 'plotId'])
+    .index('by_owner', ['ownerId']),
+
+  /** A question session in town: `library` pays for correct answers, `build` is the exam
+   * a player must pass to add a floor. `refs` are question references: `q:<testQuestions id>`
+   * for the teacher's own questions, `p:<preset>:<index>` for built-in fallback questions. */
+  townQuizzes: defineTable({
+    playerId: v.id('townPlayers'),
+    kind: v.union(v.literal('library'), v.literal('build'), v.literal('fuel'), v.literal('passenger'), v.literal('collect')),
+    plotId: v.optional(v.string()),
+    tripId: v.optional(v.id('townTrips')),
+    refs: v.array(v.string()),
+    need: v.number(),
+    index: v.number(),
+    correct: v.number(),
+    streak: v.number(),
+    earned: v.number(),
+    status: v.union(v.literal('active'), v.literal('passed'), v.literal('failed'), v.literal('done'), v.literal('cancelled')),
+    createdAt: v.number(),
+  }).index('by_player_status', ['playerId', 'status']),
+
+  /** Which questions a player has already answered correctly — new ones pay more. */
+  townLearned: defineTable({
+    playerId: v.id('townPlayers'),
+    ref: v.string(),
+    /** `t:<testId>` or `p:<preset>` — for per-topic mastery. */
+    topic: v.optional(v.string()),
+    correctCount: v.number(),
+    wrongCount: v.optional(v.number()),
+    lastAt: v.number(),
+  }).index('by_player', ['playerId', 'ref']),
+
+  /** The town's charity fund (zakat + sadaqa), one row per town. */
+  townFunds: defineTable({
+    townKey: v.string(),
+    balance: v.number(),
+    given: v.number(),
+    donors: v.number(),
+  }).index('by_town', ['townKey']),
+
+  /** Player-to-player sales on the town market. */
+  townSales: defineTable({
+    townKey: v.string(),
+    sellerId: v.id('townPlayers'),
+    buyerId: v.id('townPlayers'),
+    what: v.union(v.literal('plot'), v.literal('car')),
+    plotId: v.optional(v.string()),
+    label: v.string(),
+    price: v.number(),
+    at: v.number(),
+  }).index('by_seller', ['sellerId', 'at']),
+
+  /** Taxi rides. `pickup` → driving to the passenger, `ride` → passenger on board. */
+  townTrips: defineTable({
+    playerId: v.id('townPlayers'),
+    fromStop: v.string(),
+    toStop: v.string(),
+    status: v.union(v.literal('pickup'), v.literal('ride'), v.literal('done'), v.literal('cancelled')),
+    createdAt: v.number(),
+    pickedAt: v.optional(v.number()),
+    doneAt: v.optional(v.number()),
+    fare: v.optional(v.number()),
+    /** The passenger's question was answered correctly → tip on arrival. */
+    tip: v.optional(v.boolean()),
+  }).index('by_player_status', ['playerId', 'status']),
+
   /** A student's request to buy a gift with their coins. Coins are only *reserved* while
    * `pending` (they count against the available balance); the `gift_redeemed` transaction is
    * written when a teacher/admin confirms with "Buyurtma berdim" (`ordered`). Gift fields are

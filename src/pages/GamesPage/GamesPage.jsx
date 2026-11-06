@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { ChevronRight, Gamepad2, Play, Radio, Timer, Trophy, User, Users } from 'lucide-react'
+import { Building2, ChevronRight, Gamepad2, Play, Radio, Timer, Trophy, User, Users } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card'
 import { Button } from '@/shared/ui/button'
 import { Label } from '@/shared/ui/label'
@@ -272,11 +272,47 @@ function StudentGames() {
   )
 }
 
+/** Card for game #2 — the shared 3D town. */
+function TownCard() {
+  return (
+    <Link to={ROUTES.TOWN} className="group block">
+      <motion.div
+        whileHover={{ y: -3 }}
+        className="relative isolate overflow-hidden rounded-3xl bg-gradient-to-br from-sky-400 via-sky-500 to-emerald-500 p-6 text-white shadow-xl shadow-sky-900/20 sm:p-8"
+      >
+        <div aria-hidden="true" className="pointer-events-none absolute -right-6 bottom-0 -z-10 flex items-end gap-2 opacity-30">
+          {[60, 110, 80, 150, 95, 70].map((h, i) => (
+            <div key={i} className="w-8 rounded-t-md bg-white sm:w-12" style={{ height: h }} />
+          ))}
+        </div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-white text-sky-600 shadow-lg">
+              <Building2 className="size-8" />
+            </div>
+            <div>
+              <p className="text-xs font-black tracking-[0.2em] text-white/80 uppercase">Yangi • 3D o'yin</p>
+              <h3 className="text-2xl font-black sm:text-3xl">Shaharcha</h3>
+              <p className="mt-1 max-w-md text-sm text-white/85">
+                Hovli sotib oling, 1-2-3 qavatli uy quring, mashina oling. Butun markaz bitta shaharda yashaydi!
+              </p>
+            </div>
+          </div>
+          <span className="flex h-12 w-fit items-center gap-2 rounded-2xl bg-white px-6 font-black text-sky-600 shadow-lg transition-transform group-hover:scale-105">
+            <Play className="size-5 fill-current" /> Kirish
+          </span>
+        </div>
+      </motion.div>
+    </Link>
+  )
+}
+
 export function GamesPage() {
   const role = useAuthStore((s) => s.role)
 
   return (
     <div className="space-y-5">
+      <TownCard />
       <div>
         <h2 className="text-lg font-semibold text-foreground">Jonli o'yinlar</h2>
         <p className="text-sm text-muted-foreground">

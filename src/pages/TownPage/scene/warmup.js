@@ -4,6 +4,13 @@ export function setCameraFar(camera, far) {
   camera.updateProjectionMatrix()
 }
 
+/** Sets how close to the camera things are still drawn (small indoors, so walls a step away
+ * don't get cut off). */
+export function setCameraNear(camera, near) {
+  camera.near = near
+  camera.updateProjectionMatrix()
+}
+
 /** Getting the whole city ready before play, so nothing hitches later:
  *  - every texture is uploaded to the GPU,
  *  - every shader is compiled — including the ones of objects that only appear up close or

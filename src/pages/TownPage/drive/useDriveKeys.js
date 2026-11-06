@@ -12,6 +12,8 @@ const KEYMAP = {
   ArrowRight: 'right',
   KeyD: 'right',
   Space: 'brake',
+  ShiftLeft: 'run',
+  ShiftRight: 'run',
 }
 
 /** Keyboard controls while driving: WASD / arrows, Space = handbrake, H = horn. */

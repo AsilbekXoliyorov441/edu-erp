@@ -10,6 +10,8 @@ import { PublicPlaces } from '@/pages/TownPage/scene/PublicPlaces'
 import { NewUzbekistan } from '@/pages/TownPage/scene/NewUzbekistan'
 import { MetroLine } from '@/pages/TownPage/scene/MetroLine'
 import { DriveController } from '@/pages/TownPage/drive/DriveController'
+import { WalkController } from '@/pages/TownPage/drive/WalkController'
+import { walkBuildings } from '@/pages/TownPage/drive/walkState'
 import { TaxiMarkers } from '@/pages/TownPage/drive/TaxiMarkers'
 import { useDriveHud } from '@/pages/TownPage/drive/driveState'
 import { FADE_MS, applyNight, isNightNow, nightState } from '@/pages/TownPage/scene/dayNight'
@@ -302,7 +304,7 @@ function Showcase() {
 
 export const TownScene = memo(
   forwardRef(function TownScene(
-  { town, selectedId, onSelect, quality = 'medium', showcase = false, drive = null, onReady },
+  { town, selectedId, onSelect, quality = 'medium', showcase = false, drive = null, walk = null, onReady },
   ref,
 ) {
   const controls = useRef(null)
@@ -317,6 +319,8 @@ export const TownScene = memo(
   const ownedById = useMemo(() => new Map((plots ?? []).map((p) => [p.plotId, p])), [plots])
   const emptyPlots = useMemo(() => TOWN_PLOTS.filter((p) => !p.public && !ownedById.has(p.id)), [ownedById])
   const groundPlots = useMemo(() => emptyPlots.filter((p) => p.row !== 'P'), [emptyPlots])
+  // buildings the walking player bumps into and can go inside
+  const walkers = useMemo(() => walkBuildings(plots), [plots])
 
   // Each player's car parks at their lowest-numbered plot.
   const carByPlot = useMemo(() => {
@@ -377,7 +381,7 @@ export const TownScene = memo(
     >
       <color attach="background" args={['#bcd8ef']} />
       <fog attach="fog" args={['#cfe1ee', 1200, 4200]} />
-      <DayNightLights quality={quality} settle={!drive} />
+      <DayNightLights quality={quality} settle={!drive && !walk} />
       <Warmup onReady={onReady} />
       <LampDriver enabled={quality !== 'low'} />
       <PerformanceMonitor
@@ -395,9 +399,9 @@ export const TownScene = memo(
       <StreetLamps />
       <TrafficLights />
       <LotSignPosts plots={emptyPlots} />
-      <EmptyLotGrounds plots={groundPlots} onSelect={showcase || drive ? noop : select} onHover={showcase || drive ? noop : handleHover} />
+      <EmptyLotGrounds plots={groundPlots} onSelect={showcase || drive || walk ? noop : select} onHover={showcase || drive || walk ? noop : handleHover} />
       <Surroundings sparse={quality === 'low'} />
-      <PublicPlaces selectedId={selectedId} onSelect={showcase || drive ? noop : select} />
+      <PublicPlaces selectedId={selectedId} onSelect={showcase || drive || walk ? noop : select} />
       <NewUzbekistan />
       {TOWN_PLOTS.filter((p) => !p.public).map((plot) => {
         const owned = ownedById.get(plot.id) ?? null
@@ -410,13 +414,15 @@ export const TownScene = memo(
             isMine={!!owned && owned.ownerId === town?.me?.id}
             selected={selectedId === plot.id}
             hovered={hoveredId === plot.id}
-            onSelect={showcase || drive ? noop : select}
-            onHover={showcase || drive ? noop : handleHover}
+            onSelect={showcase || drive || walk ? noop : select}
+            onHover={showcase || drive || walk ? noop : handleHover}
           />
         )
       })}
 
-      {drive ? (
+      {walk ? (
+        <WalkController spawn={walk.spawn} color={walk.color} buildings={walkers} />
+      ) : drive ? (
         <>
           <DriveController car={drive.car} spawn={drive.spawn} target={drive.target} onArrive={drive.onArrive} onRedLight={drive.onRedLight} />
           <TaxiMarkers trip={drive.trip} />

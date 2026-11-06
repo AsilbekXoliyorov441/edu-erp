@@ -66,9 +66,12 @@ export function DriveController({ car, spawn, target, onArrive, onRedLight }) {
     if (!throttle && !reverse) c.v -= Math.sign(c.v) * Math.min(Math.abs(c.v), (1.8 + Math.abs(c.v) * 0.18) * dt)
     c.v = Math.max(-MAX_REVERSE, Math.min(MAX_SPEED, c.v))
 
+    // the wheel turns in gradually (and comes back to centre a little faster when let go),
+    // and the faster the car goes the less it can turn — a tap no longer spins it round
     const steerTarget = (i.left ? 1 : 0) - (i.right ? 1 : 0)
-    c.steer += (steerTarget - c.steer) * Math.min(1, dt * 7)
-    const maxSteer = 0.6 * (1 - Math.min(0.55, Math.abs(c.v) / 40))
+    const steerRate = steerTarget === 0 ? 5 : 2.2
+    c.steer += (steerTarget - c.steer) * Math.min(1, dt * steerRate)
+    const maxSteer = 0.42 / (1 + Math.abs(c.v) / 9)
     const drift = i.brake && Math.abs(c.v) > 8 ? 1.6 : 1
     c.h += (c.v / WHEELBASE) * Math.tan(c.steer * maxSteer) * drift * dt
 

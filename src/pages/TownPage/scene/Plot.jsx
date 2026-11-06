@@ -8,10 +8,9 @@ import { getMaterials, glowPool, plainMaterial } from '@/pages/TownPage/scene/ma
 import { Building } from '@/pages/TownPage/scene/Buildings'
 import { Baked } from '@/pages/TownPage/scene/Baked'
 import { Lod } from '@/pages/TownPage/scene/Lod'
-import { buildingBox } from '@/pages/TownPage/scene/buildingInfo'
+import { buildingBox, yardLayout } from '@/pages/TownPage/scene/buildingInfo'
 import { Car } from '@/pages/TownPage/scene/Car'
 
-const HOUSE_X = -2
 
 function SelectionFrame({ w, d, color }) {
   const material = useMemo(
@@ -330,8 +329,8 @@ function OwnedYard({ plot, owned, car, isMine }) {
   // stays near the street and the back becomes a garden.
   const narrow = plot.w < 16
   const tight = narrow || box.w > plot.w - 8
-  const bx = tight ? 0 : HOUSE_X
-  const bz = Math.max(halfD - 14.5, -halfD + box.d / 2 + 0.8)
+  // (the same layout the walking player collides with — see yardLayout)
+  const { bx, bz } = yardLayout(plot, owned.kind, owned.design, owned.floors)
   const front = bz + box.d / 2
   const carPos = tight ? [plot.w > 22 ? Math.min(halfW - 3, box.w / 2 - 2.5) : 2.7, 0.1, halfD - 2.6] : [5.6, 0.1, halfD - 6]
   const roomy = plot.d > 24 || plot.w > 30
@@ -442,7 +441,7 @@ function ParkYard({ plot, owned, isMine }) {
   const halfW = plot.w / 2
   const halfD = plot.d / 2
   const box = buildingBox(owned.kind, owned.design, Math.max(1, owned.floors))
-  const bz = Math.min(halfD - box.d / 2 - 3, -halfD + box.d / 2 + 1.5)
+  const { bz } = yardLayout(plot, owned.kind, owned.design, owned.floors)
   const front = bz + box.d / 2
   const color = PARASOLS[(plot.number ?? 0) % PARASOLS.length]
   const flowers = ['#f43f5e', '#f59e0b', '#a855f7', '#ec4899']

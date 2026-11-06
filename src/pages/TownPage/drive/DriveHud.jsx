@@ -228,6 +228,35 @@ export function TouchControls() {
   )
 }
 
+/** On-screen buttons for walking: turn left/right, walk forward/back, and run. */
+export function WalkTouchControls() {
+  return (
+    <>
+      <div className="pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-30 flex gap-3">
+        <HoldButton control="left" label="Chapga burilish" className="size-20">
+          <ChevronLeft className="size-10" />
+        </HoldButton>
+        <HoldButton control="right" label="O'ngga burilish" className="size-20">
+          <ChevronRight className="size-10" />
+        </HoldButton>
+      </div>
+      <div className="pointer-events-auto absolute right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 flex items-end gap-3">
+        <div className="flex flex-col gap-3">
+          <HoldButton control="run" label="Yugurish" className="h-14 w-20 bg-sky-500/40 text-xs font-black">
+            🏃
+          </HoldButton>
+          <HoldButton control="down" label="Orqaga" className="h-16 w-20">
+            <ChevronDown className="size-10" />
+          </HoldButton>
+        </div>
+        <HoldButton control="up" label="Yurish" className="h-36 w-20 bg-emerald-500/40">
+          <ChevronUp className="size-12" />
+        </HoldButton>
+      </div>
+    </>
+  )
+}
+
 export function HornButton() {
   return (
     <button

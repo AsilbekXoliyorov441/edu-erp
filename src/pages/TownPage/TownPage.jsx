@@ -50,9 +50,10 @@ import { BuildPlanner } from '@/pages/TownPage/BuildPlanner'
 import { IslamicBank } from '@/pages/TownPage/IslamicBank'
 import { DayClock } from '@/pages/TownPage/DayClock'
 import { BuyListedPlot, MarketPanel, SellPlotBox } from '@/pages/TownPage/MarketPanel'
-import { HornButton, MiniMap, Speedometer, TouchControls, TripCard } from '@/pages/TownPage/drive/DriveHud'
+import { HornButton, MiniMap, Speedometer, TouchControls, TripCard, WalkTouchControls } from '@/pages/TownPage/drive/DriveHud'
 import { useDriveKeys, useIsTouch } from '@/pages/TownPage/drive/useDriveKeys'
 import { useDriveHud } from '@/pages/TownPage/drive/driveState'
+import { useWalk } from '@/pages/TownPage/drive/walkState'
 import { detectGpu } from '@/pages/TownPage/scene/gpu'
 import { useClockStore } from '@/pages/TownPage/scene/dayNight'
 
@@ -588,6 +589,26 @@ export function TownPage() {
   const [showResidents, setShowResidents] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [driving, setDriving] = useState(false)
+  // walking around on foot (no fuel needed)
+  const [walking, setWalking] = useState(null)
+  const walkDoor = useWalk((st) => st.door)
+  const walkInside = useWalk((st) => st.inside)
+  const walkNearLift = useWalk((st) => st.nearLift)
+  const [liftOpen, setLiftOpen] = useState(false)
+  const walkAsk = useWalk((st) => st.ask)
+  // E: go in / come out through a door, or call the lift
+  useEffect(() => {
+    if (!walking) return undefined
+    const onKey = (e) => {
+      if (e.code !== 'KeyE' || e.repeat) return
+      const st = useWalk.getState()
+      if (st.inside && st.nearLift) setLiftOpen(true)
+      else if (st.door && st.inside) st.ask({ type: 'exit' })
+      else if (st.door) st.ask({ type: 'enter', id: st.door })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [walking])
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [planFor, setPlanFor] = useState(null)
   const [marketOpen, setMarketOpen] = useState(false)
@@ -598,7 +619,7 @@ export function TownPage() {
   const quiz = useTownQuiz()
   const quizOpen = !!quiz
   const [fuelSync, setFuelSync] = useState({ ms: 0, at: 0 })
-  useDriveKeys(driving && !quizOpen)
+  useDriveKeys((driving || !!walking) && !quizOpen)
 
   useEffect(() => {
     const unlock = unlockAudio()
@@ -707,6 +728,17 @@ export function TownPage() {
     if (!trip) requestRide({ x: stop.x, z: stop.z })
   }
 
+  /** Get out and walk: from your own house, or from the centre of town. */
+  const startWalk = () => {
+    const stop = myFirstPlot ? STOP_BY_ID[myFirstPlot.id] : null
+    const spawn = stop ? { x: stop.walkX ?? stop.x, z: stop.walkZ ?? stop.z, heading: stop.walkZ > stop.z ? 0 : Math.PI } : { x: 0, z: 30, heading: Math.PI }
+    setSelectedId(null)
+    setShowResidents(false)
+    setMobileMenu(false)
+    setWalking({ spawn, color: me.color })
+    toast("🚶 Piyoda! Yurish: ↑ / W, burilish: ← → / A D, yugurish: Shift")
+  }
+
   const onArrive = async (kind) => {
     if (!trip) return
     try {
@@ -808,7 +840,8 @@ export function TownPage() {
   // the phone menu's buttons
   const runMenu = (key) => {
     setMobileMenu(false)
-    if (key === 'cars') setCarShop(true)
+    if (key === 'walk') startWalk()
+    else if (key === 'cars') setCarShop(true)
     else if (key === 'home') {
       if (myFirstPlot) focus(myFirstPlot.id)
       else sceneRef.current?.home()
@@ -839,6 +872,7 @@ export function TownPage() {
             quality={quality}
             showcase={!me}
             drive={drive}
+            walk={walking}
             key={me ? 'play' : 'showcase'}
             onReady={markReady}
           />
@@ -910,13 +944,13 @@ export function TownPage() {
             </HudButton>
           </div>
         )}
-        {me && !driving && (
+        {me && !driving && !walking && (
           <div className="pointer-events-auto flex items-center gap-2 sm:hidden">
             <DayClock staff={!!town.viewer?.staff} />
             <SoundToggle className="bg-white/85 text-gray-900 shadow-lg hover:bg-white dark:bg-gray-900/85 dark:text-gray-100" />
           </div>
         )}
-        {me && !driving && (
+        {me && !driving && !walking && (
           <div className="pointer-events-auto hidden flex-wrap items-center justify-end gap-2 sm:flex">
             <HudButton onClick={() => setLibraryOpen(true)} title="Kutubxona: savol yechib pul ishlash" className="bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-500 dark:text-white">
               📚 <span className="hidden sm:inline">Kutubxona</span>
@@ -926,6 +960,9 @@ export function TownPage() {
             </HudButton>
             <HudButton onClick={startTaxi} title="Taksi bo'lib ishlash" className="bg-yellow-400 text-yellow-950 hover:bg-yellow-300 dark:bg-yellow-400 dark:text-yellow-950">
               🚕 Taksi
+            </HudButton>
+            <HudButton onClick={startWalk} title="Piyoda shaharni aylanish">
+              🚶 <span className="hidden sm:inline">Piyoda</span>
             </HudButton>
             <HudButton onClick={claim} disabled={!bonusReady || claiming} title="Kunlik bonus" className={bonusReady ? 'animate-pulse bg-amber-400 text-amber-950 hover:bg-amber-300 dark:bg-amber-400 dark:text-amber-950' : ''}>
               <Gift className="size-4" />
@@ -1011,8 +1048,90 @@ export function TownPage() {
         </>
       )}
 
+      {/* walking HUD */}
+      {me && walking && (
+        <>
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <div className="pointer-events-auto flex gap-2">
+              <SoundToggle className="bg-white/85 text-gray-900 shadow-lg hover:bg-white" />
+              <HudButton
+                onClick={() => {
+                  setLiftOpen(false)
+                  setWalking(null)
+                }}
+                title="Piyoda rejimidan chiqish" className="bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-600">
+                <X className="size-4" /> Chiqish
+              </HudButton>
+            </div>
+          </div>
+          <div className="pointer-events-none absolute top-16 right-3 z-20 hidden sm:block">
+            <MiniMap trip={null} />
+          </div>
+          {/* doors, floors and the lift */}
+          <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex flex-col items-center gap-2 px-3">
+            {walkInside && (
+              <Glass className="px-4 py-2 text-sm font-black">
+                🏢 {walkInside.floor === 0 ? 'Birinchi qavat' : `${walkInside.floor + 1}-qavat`} <span className="font-semibold text-gray-500">/ {walkInside.floors}</span>
+              </Glass>
+            )}
+            <div className="pointer-events-auto flex gap-2">
+              {walkDoor && !walkInside && (
+                <button type="button" onClick={() => walkAsk({ type: 'enter', id: walkDoor })} className="h-12 cursor-pointer rounded-2xl bg-blue-600 px-5 text-sm font-black text-white shadow-xl active:scale-95">
+                  🚪 Ichkariga kirish {!isTouch && <span className="opacity-70">(E)</span>}
+                </button>
+              )}
+              {walkDoor && walkInside && (
+                <button type="button" onClick={() => walkAsk({ type: 'exit' })} className="h-12 cursor-pointer rounded-2xl bg-emerald-600 px-5 text-sm font-black text-white shadow-xl active:scale-95">
+                  🚪 Tashqariga chiqish {!isTouch && <span className="opacity-70">(E)</span>}
+                </button>
+              )}
+              {walkInside && walkNearLift && (
+                <button type="button" onClick={() => setLiftOpen(true)} className="h-12 cursor-pointer rounded-2xl bg-slate-800 px-5 text-sm font-black text-white shadow-xl active:scale-95">
+                  🛗 Lift {!isTouch && <span className="opacity-70">(E)</span>}
+                </button>
+              )}
+            </div>
+          </div>
+          <AnimatePresence>
+            {liftOpen && walkInside && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setLiftOpen(false)}>
+                <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm space-y-3 rounded-3xl bg-slate-900 p-4 text-white shadow-2xl">
+                  <p className="text-lg font-black">🛗 Qaysi qavatga?</p>
+                  <div className="grid max-h-[50vh] grid-cols-5 gap-2 overflow-y-auto">
+                    {Array.from({ length: walkInside.floors }, (_, f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => {
+                          setLiftOpen(false)
+                          walkAsk({ type: 'floor', floor: f })
+                        }}
+                        className={cn('h-12 cursor-pointer rounded-xl text-sm font-black tabular-nums active:scale-95', f === walkInside.floor ? 'bg-amber-400 text-amber-950' : 'bg-slate-700 hover:bg-slate-600')}
+                      >
+                        {f === 0 ? '1 🚪' : f + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-400">Derazaga yaqin borib shaharga qarang 🏙️</p>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {isTouch ? (
+            <WalkTouchControls />
+          ) : (
+            <Glass className="pointer-events-none absolute bottom-4 left-4 z-20 space-y-0.5 p-3 text-xs">
+              <p className="font-bold">🚶 Piyoda</p>
+              <p><b>W / ↑</b> yurish • <b>S / ↓</b> orqaga</p>
+              <p><b>A D / ← →</b> burilish • <b>Shift</b> yugurish</p>
+              <p><b>E</b> eshik / lift</p>
+            </Glass>
+          )}
+        </>
+      )}
+
       {/* phones: the main actions in a dock at the bottom, the rest in a menu */}
-      {me && !driving && !selectedId && (
+      {me && !driving && !walking && !selectedId && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:hidden">
           <div className="pointer-events-auto grid grid-cols-5 gap-1.5 rounded-3xl bg-white/90 p-1.5 shadow-2xl ring-1 ring-black/5 backdrop-blur-md dark:bg-gray-900/90">
             <DockButton onClick={() => setLibraryOpen(true)} icon="📚" label="Kutubxona" tone="bg-emerald-500 text-white" />
@@ -1046,6 +1165,7 @@ export function TownPage() {
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {[
+                  ['walk', '🚶', 'Piyoda'],
                   ['cars', '🚗', 'Avtosalon'],
                   ['home', '🏠', myFirstPlot ? 'Uyim' : 'Markaz'],
                   ['tour', '🏛️', "Yangi O'zbekiston"],
@@ -1086,7 +1206,7 @@ export function TownPage() {
       </AnimatePresence>
 
       {/* right side: residents + selected plot */}
-      {me && !driving && (
+      {me && !driving && !walking && (
         <div className="pointer-events-none absolute right-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-30 flex flex-col items-end gap-2 sm:right-3 sm:bottom-3 sm:left-auto">
           {showResidents && <Residents town={town} onPick={focus} />}
           <AnimatePresence mode="wait">
@@ -1096,7 +1216,7 @@ export function TownPage() {
       )}
 
       {/* help */}
-      {me && !selectedId && !driving && (
+      {me && !selectedId && !driving && !walking && (
         <Glass className="pointer-events-none absolute bottom-3 left-3 z-10 hidden max-w-xs space-y-1 p-3 text-xs sm:block">
           <p className="flex items-center gap-1.5 font-bold">
             <MousePointerClick className="size-4 text-blue-600" /> Qanday o'ynaladi

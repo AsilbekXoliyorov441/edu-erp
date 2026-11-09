@@ -78,10 +78,17 @@ const PUBLIC_INFO = {
 function readQuality() {
   if (detectGpu().software) return 'low'
   try {
-    return localStorage.getItem(QUALITY_KEY) || 'medium'
+    const saved = localStorage.getItem(QUALITY_KEY)
+    if (saved) return saved
   } catch {
-    return 'medium'
+    // no storage: fall through to the device check
   }
+  // weak phones (little memory or few cores) start on low; the player can still raise it
+  const mem = navigator.deviceMemory
+  const cores = navigator.hardwareConcurrency
+  const phone = window.matchMedia?.('(pointer: coarse)').matches
+  if (phone && ((mem && mem <= 4) || (cores && cores <= 4))) return 'low'
+  return 'medium'
 }
 
 function useAction(fn) {

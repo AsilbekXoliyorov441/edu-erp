@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { PLOT_BY_ID, TOWN_PLOTS } from '@/shared/config/town'
 import { Ground, Overpasses, StreetLamps, Streets, TrafficLights } from '@/pages/TownPage/scene/Streets'
 import { Surroundings } from '@/pages/TownPage/scene/Nature'
-import { EmptyLotGrounds, LotSignPosts, Plot } from '@/pages/TownPage/scene/Plot'
+import { EmptyLotGrounds, LotSignPosts, NearSigns, Plot } from '@/pages/TownPage/scene/Plot'
 import { PublicPlaces } from '@/pages/TownPage/scene/PublicPlaces'
 import { NewUzbekistan } from '@/pages/TownPage/scene/NewUzbekistan'
 import { MetroLine } from '@/pages/TownPage/scene/MetroLine'
@@ -18,8 +18,10 @@ import { FADE_MS, applyNight, isNightNow, nightState } from '@/pages/TownPage/sc
 import { attachLamps, installLampShader } from '@/pages/TownPage/scene/lampShader'
 import { setCameraFar, warmUpScene } from '@/pages/TownPage/scene/warmup'
 import { setupMapControls } from '@/pages/TownPage/scene/controlsSetup'
+import { installFastMatrices } from '@/pages/TownPage/scene/fastMatrices'
 
 installLampShader()
+installFastMatrices()
 
 const noop = () => {}
 const HOME_VIEW = [120, 170, 330, 0, 0, 10]
@@ -399,11 +401,14 @@ export const TownScene = memo(
       <StreetLamps />
       <TrafficLights />
       <LotSignPosts plots={emptyPlots} />
+      <NearSigns plots={emptyPlots} onSelect={showcase || drive || walk ? noop : select} />
       <EmptyLotGrounds plots={groundPlots} onSelect={showcase || drive || walk ? noop : select} onHover={showcase || drive || walk ? noop : handleHover} />
       <Surroundings sparse={quality === 'low'} />
       <PublicPlaces selectedId={selectedId} onSelect={showcase || drive || walk ? noop : select} />
       <NewUzbekistan />
-      {TOWN_PLOTS.filter((p) => !p.public).map((plot) => {
+      {/* an empty lot is drawn by the shared ground / posts / signs above; it only needs its
+          own piece while it is pointed at or picked (or when it is a paved park lot) */}
+      {TOWN_PLOTS.filter((p) => !p.public && (ownedById.has(p.id) || p.row === 'P' || p.id === selectedId || p.id === hoveredId)).map((plot) => {
         const owned = ownedById.get(plot.id) ?? null
         return (
           <Plot

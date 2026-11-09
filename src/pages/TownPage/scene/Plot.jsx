@@ -1,7 +1,8 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { useFrame } from '@react-three/fiber'
-import { Html, Instance, Instances } from '@react-three/drei'
+import { useFrame, useThree } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
+import { Instance, Instances } from '@/pages/TownPage/scene/StaticInstances'
 import { DISTRICTS, formatMoney } from '@/shared/config/town'
 import { concreteTexture, dirtTexture, grassTexture, signTexture } from '@/pages/TownPage/scene/textures'
 import { getMaterials, glowPool, plainMaterial } from '@/pages/TownPage/scene/materials'
@@ -79,6 +80,13 @@ function ForSaleSign({ plot, price = plot.price, resale = false, x = 0, posts = 
     })
     return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 })
   }, [plot.number, plot.district, price, resale])
+  useEffect(
+    () => () => {
+      material.map?.dispose()
+      material.dispose()
+    },
+    [material],
+  )
   return (
     <group position={[x, 0, plot.d / 2 - 2]}>
       {posts &&
@@ -92,6 +100,52 @@ function ForSaleSign({ plot, price = plot.price, resale = false, x = 0, posts = 
       </mesh>
     </group>
   )
+}
+
+/** How close the camera must be for an empty lot's sale sign to show (there are thousands
+ * of lots, and from further away the board is too small to read anyway). */
+const SIGN_DISTANCE = 160
+
+/** The sale signs of the empty lots near the camera. Instead of every lot keeping its own
+ * sign (and the objects around it) in the scene all the time, the lots within reach are
+ * looked up a few times a second and only their signs are drawn. */
+export function NearSigns({ plots, onSelect }) {
+  const get = useThree((st) => st.get)
+  const [near, setNear] = useState([])
+  useEffect(() => {
+    let last = ''
+    const look = () => {
+      const cam = get().camera.position
+      const list = []
+      for (const p of plots) {
+        if (p.row === 'P') continue
+        const dx = p.x - cam.x
+        const dz = p.z - cam.z
+        if (dx * dx + cam.y * cam.y + dz * dz < SIGN_DISTANCE * SIGN_DISTANCE) list.push(p)
+      }
+      const key = list.map((p) => p.id).join(',')
+      if (key !== last) {
+        last = key
+        setNear(list)
+      }
+    }
+    look()
+    const id = setInterval(look, 250)
+    return () => clearInterval(id)
+  }, [get, plots])
+  return near.map((plot) => (
+    <group
+      key={plot.id}
+      position={[plot.x, 0, plot.z]}
+      rotation-y={plot.rotation}
+      onClick={(e) => {
+        e.stopPropagation()
+        onSelect(plot.id)
+      }}
+    >
+      <ForSaleSign plot={plot} />
+    </group>
+  ))
 }
 
 /** The posts of every empty lot's sign, in one draw call. */
@@ -568,11 +622,7 @@ function EmptyLot({ plot }) {
           <meshStandardMaterial map={dirt} roughness={1} color="#e8dfcf" />
         </mesh>
       )}
-      {/* the sale sign only up close: there are hundreds of lots */}
-      <Lod distance={160}>
-        <ForSaleSign plot={plot} />
-        <group />
-      </Lod>
+      {/* the sale sign: drawn by <NearSigns> for the lots near the camera */}
     </group>
   )
 }

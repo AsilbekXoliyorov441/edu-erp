@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, KeyRound, PackageCheck, ShoppingBag, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, KeyRound, ListChecks, PackageCheck, ShoppingBag, XCircle } from 'lucide-react'
 
 /** Icon + tone per notification type. */
 export const NOTIFICATION_META = {
@@ -8,6 +8,7 @@ export const NOTIFICATION_META = {
   order_delivered: { icon: PackageCheck, tone: 'bg-success/15 text-success' },
   order_rejected: { icon: XCircle, tone: 'bg-destructive/15 text-destructive' },
   pin_reset: { icon: KeyRound, tone: 'bg-primary/10 text-primary' },
+  lesson_quiz: { icon: ListChecks, tone: 'bg-success/15 text-success' },
 }
 
 export function getNotificationMeta(type) {

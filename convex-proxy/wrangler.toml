@@ -1,0 +1,6 @@
+# Deploy: cd convex-proxy && npx wrangler login && npx wrangler deploy
+# Then put the printed https://convex-proxy.<name>.workers.dev URL into Vercel as
+# VITE_CONVEX_PROXY_URL and redeploy the site.
+name = "convex-proxy"
+main = "worker.js"
+compatibility_date = "2026-10-01"

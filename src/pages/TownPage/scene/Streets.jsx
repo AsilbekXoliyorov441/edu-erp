@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
-import { Instance, Instances } from '@react-three/drei'
+import { Instance, Instances } from '@/pages/TownPage/scene/StaticInstances'
 import { ARCS, ARTERIAL, AVENUE_WIDTH, FOOTBRIDGES, INTERSECTIONS, WORLD, NX_ROADS, NZ_ROADS, ROUNDABOUTS, onArc, OVERPASS, SIDEWALK, X_ROADS, Z_ROADS, deckHeight, lightState } from '@/shared/config/town'
 import { asphaltTexture, concreteTexture, grassTexture, plasterTexture, sidewalkTexture } from '@/pages/TownPage/scene/textures'
 import { getMaterials, plainMaterial } from '@/pages/TownPage/scene/materials'

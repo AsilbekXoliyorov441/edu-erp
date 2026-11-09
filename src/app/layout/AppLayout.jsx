@@ -4,6 +4,7 @@ import { MobileNav } from '@/widgets/Sidebar/MobileNav'
 import { Header } from '@/widgets/Header/Header'
 import { PageTransition } from '@/app/layout/PageTransition'
 import { LiveGameBanner } from '@/widgets/LiveGameBanner/LiveGameBanner'
+import { LessonQuizBanner } from '@/widgets/LessonQuizBanner/LessonQuizBanner'
 import { SilentBoundary } from '@/shared/ui/silent-boundary'
 
 export function AppLayout() {
@@ -16,6 +17,9 @@ export function AppLayout() {
           <main className="flex-1 px-4 pb-24 pt-4 sm:px-6 lg:px-[28px] lg:pb-[24px] lg:pt-[24px]">
             <SilentBoundary>
               <LiveGameBanner />
+            </SilentBoundary>
+            <SilentBoundary>
+              <LessonQuizBanner />
             </SilentBoundary>
             <PageTransition>
               <Outlet />

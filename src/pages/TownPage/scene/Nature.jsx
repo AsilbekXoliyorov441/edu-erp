@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Instance, Instances } from '@react-three/drei'
+import { Instance, Instances } from '@/pages/TownPage/scene/StaticInstances'
 import { ARCS, TOWN_HALF_X, TOWN_HALF_Z, WORLD, isDrivable, onArc } from '@/shared/config/town'
 import { getMaterials, plainMaterial } from '@/pages/TownPage/scene/materials'
 

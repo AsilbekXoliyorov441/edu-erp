@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
-import { Instance, Instances } from '@react-three/drei'
+import { Instance, Instances } from '@/pages/TownPage/scene/StaticInstances'
 import { NORTH, PARK_LANES, RING_Z, TOWN_PLOTS } from '@/shared/config/town'
 import { concreteTexture, facadeTexture, grassTexture, signTexture } from '@/pages/TownPage/scene/textures'
 import { getMaterials, glowPool, plainMaterial, uplight } from '@/pages/TownPage/scene/materials'

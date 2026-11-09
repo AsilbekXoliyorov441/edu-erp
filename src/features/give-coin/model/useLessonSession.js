@@ -106,6 +106,20 @@ export function useLessonSession({ group, students, date }) {
     })
   }
 
+  /** Lights the Q&A cells from the start-of-lesson quiz: one cell per correct answer, at
+   * that question's number. A student who took the quiz is in class, so unmarked attendance
+   * becomes "present"; a student marked absent is left alone. */
+  const applyQuizResults = (results) =>
+    update((next) => {
+      results.forEach((r) => {
+        if (!(r.studentId in next.attendance)) return
+        if (next.attendance[r.studentId] === 'absent') return
+        if (!next.attendance[r.studentId]) next.attendance[r.studentId] = 'present'
+        setQaSlots(next, r.studentId, r.correctSlots.filter((n) => n <= QA_CATEGORY.max))
+      })
+      return next
+    })
+
   const markAllPresent = () =>
     update((next) => {
       students.forEach((s) => {
@@ -188,6 +202,7 @@ export function useLessonSession({ group, students, date }) {
     setAttendance,
     qaSlots,
     toggleQaSlot,
+    applyQuizResults,
     fillRowMax,
     fillColumnMax,
     markAllPresent,

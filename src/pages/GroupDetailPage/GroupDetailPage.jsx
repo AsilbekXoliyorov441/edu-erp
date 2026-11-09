@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Link, useParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Clock, ListChecks, Users2 } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
@@ -24,6 +25,7 @@ import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
 import { useAttendanceStore } from '@/entities/attendance/model/store'
 import { useTransactionStore } from '@/entities/transaction/model/store'
 import { useTestsForGroup } from '@/entities/test-assignment/model/store'
+import { useLessonQuizActions } from '@/entities/lesson-quiz/model/store'
 import { useBreadcrumbStore } from '@/shared/lib/store/breadcrumbStore'
 import { getGroupStats } from '@/shared/lib/stats'
 import { getMonthFromLessonNumber } from '@/shared/lib/date'
@@ -72,6 +74,8 @@ export function GroupDetailPage() {
   const { groupId } = useParams()
   const [sessionActive, setSessionActive] = useState(false)
   const [lessonDate, setLessonDate] = useState(null)
+  const [quizId, setQuizId] = useState(null)
+  const quizActions = useLessonQuizActions()
 
   const groups = useGroupStore((s) => s.items)
   const students = useStudentStore((s) => s.items)
@@ -116,6 +120,7 @@ export function GroupDetailPage() {
   const closeSession = () => {
     setSessionActive(false)
     setLessonDate(null)
+    setQuizId(null)
   }
 
   if (sessionActive) {
@@ -127,6 +132,7 @@ export function GroupDetailPage() {
         nextLessonNumber={nextLessonNumber}
         monthIndex={monthIndex}
         date={lessonDate}
+        quizId={quizId}
         onDone={closeSession}
         onCancel={closeSession}
       />
@@ -177,7 +183,18 @@ export function GroupDetailPage() {
             group={group}
             lessons={groupLessons}
             disabled={groupStudents.length === 0}
-            onStart={(date) => {
+            onStart={async (date, testIds) => {
+              let newQuizId = null
+              if (testIds.length) {
+                try {
+                  newQuizId = await quizActions.create(group.id, testIds)
+                  toast.success("Savol-javob ochildi — o'quvchilarga bildirishnoma yuborildi")
+                } catch (err) {
+                  toast.error(err?.data ?? "Savol-javobni ochib bo'lmadi")
+                  throw err
+                }
+              }
+              setQuizId(newQuizId)
               setLessonDate(date)
               setSessionActive(true)
             }}

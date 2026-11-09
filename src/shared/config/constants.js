@@ -87,6 +87,23 @@ export const ROUTES = {
   testDetail: (id) => `/testlar/${id}`,
   TAKE_TEST: '/testlar/:testId/yechish',
   takeTest: (id) => `/testlar/${id}/yechish`,
+  LESSON_QUIZ: '/dars-savol-javob',
+}
+
+/** Start-of-lesson Q&A ("darsdagi savol-javob"): each student answers `QUESTION_COUNT`
+ * random questions from the topics the teacher picked, `SECONDS_PER_QUESTION` each. One
+ * coin per correct answer, so the count matches the Savol-javob category max. */
+export const LESSON_QUIZ = {
+  QUESTION_COUNT: 5,
+  SECONDS_PER_QUESTION: 10,
+  /** The 3-2-1 before the first question. */
+  LEAD_IN_MS: 3000,
+  /** How long the right/wrong result stays on screen before the next question. */
+  FEEDBACK_MS: 1500,
+  /** Extra time accepted after the countdown, for network latency. */
+  GRACE_MS: 1500,
+  /** A quiz the teacher forgot to close stops showing to students after this. */
+  MAX_AGE_MS: 4 * 60 * 60 * 1000,
 }
 
 /** Live quiz games ("jonli o'yinlar"). Points per correct answer fall from `MAX_POINTS` to

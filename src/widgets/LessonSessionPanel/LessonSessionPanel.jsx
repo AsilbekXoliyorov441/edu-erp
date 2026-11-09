@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowLeft, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coins, Pencil } from 'lucide-react'
+import { ArrowLeft, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coins, ListChecks, Pencil, Square } from 'lucide-react'
+import { useLessonQuizActions, useLessonQuizResults } from '@/entities/lesson-quiz/model/store'
 import { EditGroupDialog } from '@/features/edit-group/ui/EditGroupDialog'
 import { useCurrentMonthGoal } from '@/entities/monthly-goal/model/store'
 import { formatGroupSchedule } from '@/entities/group/model/options'
@@ -113,8 +114,92 @@ function formatAverage(value) {
   return value.toFixed(1).replace('.', ',')
 }
 
-export function LessonSessionPanel({ group, students, stats, nextLessonNumber, monthIndex, date, onDone, onCancel }) {
+/** Live progress of the start-of-lesson Q&A: who finished, who is answering, who hasn't
+ * opened it yet. Coins from it land in the Savol-javob cells by themselves. */
+function QuizLivePanel({ quiz, students, onClose }) {
+  const byStudent = new Map(quiz.results.map((r) => [r.studentId, r]))
+  const doneCount = quiz.results.filter((r) => r.status === 'done').length
+  const open = quiz.status === 'active'
+
+  return (
+    <section className="flex flex-col gap-[12px] rounded-[16px] border border-[var(--cs-border)] bg-[var(--cs-surface)] px-[18px] py-[14px]">
+      <div className="flex flex-wrap items-center justify-between gap-[10px]">
+        <div className="flex min-w-0 items-center gap-[10px]">
+          <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--cs-accent-soft)] text-[var(--cs-accent-dark)]">
+            <ListChecks size={18} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="flex items-center gap-[8px] text-[15px] font-extrabold text-[var(--cs-text)]">
+              Savol-javob testi
+              {open ? (
+                <span className="rounded-[6px] bg-rose-500 px-[6px] py-[1px] text-[10px] font-black tracking-wider text-white">LIVE</span>
+              ) : (
+                <span className="rounded-[6px] bg-[var(--cs-surface-muted)] px-[6px] py-[1px] text-[11px] font-bold text-[var(--cs-muted)]">Yopilgan</span>
+              )}
+            </p>
+            <p className="truncate text-[12.5px] text-[var(--cs-muted)]">
+              {quiz.title} · {doneCount}/{students.length} tugatdi · coinlar Savol-javob ustuniga o'zi tushadi
+            </p>
+          </div>
+        </div>
+        {open && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="cs-focus flex h-[36px] cursor-pointer items-center gap-[6px] rounded-[10px] border border-[var(--cs-border-input)] bg-[var(--cs-surface)] px-[12px] text-[13px] font-semibold text-[var(--cs-text)] hover:bg-[var(--cs-hover)]"
+          >
+            <Square size={13} aria-hidden="true" /> Testni yopish
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-[6px]">
+        {students.map((s) => {
+          const r = byStudent.get(s.id)
+          let label = 'kutilmoqda'
+          let tone = 'bg-[var(--cs-surface-muted)] text-[var(--cs-muted)]'
+          if (r?.status === 'done') {
+            label = `${r.correctCount} coin`
+            tone = 'bg-[var(--cs-accent-soft)] text-[var(--cs-accent-dark)]'
+          } else if (r) {
+            label = `${r.answered}/${r.total}…`
+            tone = 'bg-[var(--cs-warn-soft)] text-[var(--cs-warn-text)]'
+          }
+          return (
+            <span key={s.id} className={cn('inline-flex items-center gap-[6px] rounded-full px-[10px] py-[4px] text-[12.5px] font-semibold', tone)}>
+              <span className="max-w-[140px] truncate">{s.fullName}</span>
+              <span className="font-extrabold">{label}</span>
+            </span>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+export function LessonSessionPanel({ group, students, stats, nextLessonNumber, monthIndex, date, quizId, onDone, onCancel }) {
   const session = useLessonSession({ group, students, date })
+  const quiz = useLessonQuizResults(quizId)
+  const quizActions = useLessonQuizActions()
+
+  // Push each student's quiz result into the grading draft whenever it changes — only the
+  // changed students, so the teacher's own edits to everyone else stay put.
+  const appliedRef = useRef(new Map())
+  const { applyQuizResults } = session
+  useEffect(() => {
+    if (!quiz) return
+    const changed = quiz.results.filter((r) => {
+      const sig = r.correctSlots.join(',') + '|' + r.answered
+      if (appliedRef.current.get(r.studentId) === sig) return false
+      appliedRef.current.set(r.studentId, sig)
+      return true
+    })
+    if (changed.length) applyQuizResults(changed)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quiz])
+
+  const closeQuiz = (lessonId) => {
+    if (quizId && quiz?.status !== 'closed') quizActions.close(quizId, lessonId).catch(() => {})
+  }
   const monthlyGoal = useCurrentMonthGoal()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
@@ -149,13 +234,20 @@ export function LessonSessionPanel({ group, students, stats, nextLessonNumber, m
   }
 
   const handleSave = async () => {
+    let result
     try {
-      await session.save()
+      result = await session.save()
     } catch (err) {
       toast.error(err?.data ?? "Saqlab bo'lmadi. Qaytadan urinib ko'ring.")
       return
     }
+    closeQuiz(result?.lessonId)
     onDone()
+  }
+
+  const handleBack = () => {
+    closeQuiz()
+    onCancel()
   }
 
   const status = session.dirty ? 'dirty' : session.savedOnce ? 'saved' : null
@@ -168,8 +260,10 @@ export function LessonSessionPanel({ group, students, stats, nextLessonNumber, m
         lessonNumber={nextLessonNumber}
         monthIndex={monthIndex}
         date={date}
-        onBack={onCancel}
+        onBack={handleBack}
       />
+
+      {quiz && <QuizLivePanel quiz={quiz} students={students} onClose={() => closeQuiz()} />}
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-[12px]">
         <StatCard dot="var(--cs-keldi)" label="Keldi">

@@ -142,6 +142,42 @@ export default defineSchema({
     .index('by_student', ['studentId'])
     .index('by_month', ['month']),
 
+  /** Start-of-lesson Q&A ("darsdagi savol-javob"). The teacher opens one per lesson from
+   * the topics they pick; every student of the group then answers their own `QUESTION_COUNT`
+   * random questions from that pool, `SECONDS_PER_QUESTION` each. Each correct answer is one
+   * Savol-javob coin — it lands live in the teacher's grading table and becomes real coins
+   * when the lesson is saved. */
+  lessonQuizzes: defineTable({
+    groupId: v.id('groups'),
+    hostId: v.id('teachers'),
+    testIds: v.array(v.id('tests')),
+    title: v.string(),
+    /** Question pool from every chosen topic. */
+    questionIds: v.array(v.id('testQuestions')),
+    status: v.union(v.literal('active'), v.literal('closed')),
+    createdAt: v.number(),
+    closedAt: v.optional(v.number()),
+    lessonId: v.optional(v.id('lessons')),
+  }).index('by_group', ['groupId']),
+
+  lessonQuizAttempts: defineTable({
+    quizId: v.id('lessonQuizzes'),
+    studentId: v.id('students'),
+    questionIds: v.array(v.id('testQuestions')),
+    /** Question currently open (equals `questionIds.length` once done). */
+    index: v.number(),
+    /** ms; when the open question's countdown started. */
+    questionStartedAt: v.number(),
+    /** Per answered question: picked option (-1 = time ran out) and whether it was right. */
+    answers: v.array(v.object({ selectedIndex: v.number(), correct: v.boolean() })),
+    correctCount: v.number(),
+    status: v.union(v.literal('active'), v.literal('done')),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index('by_quiz', ['quizId'])
+    .index('by_quiz_student', ['quizId', 'studentId']),
+
   /** A live, in-class quiz game ("jonli o'yin") a teacher hosts for one group from one of
    * their test topics. Everyone sees the same question at the same time: the host moves the
    * game `lobby → question → reveal → question … → finished`. `questionIds` freezes the
@@ -377,6 +413,7 @@ export default defineSchema({
       v.literal('order_delivered'),
       v.literal('order_rejected'),
       v.literal('pin_reset'),
+      v.literal('lesson_quiz'),
     ),
     title: v.string(),
     body: v.string(),

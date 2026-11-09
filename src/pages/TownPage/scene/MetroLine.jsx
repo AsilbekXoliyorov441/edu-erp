@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
-import { Instance, Instances } from '@react-three/drei'
+import { Instance, Instances } from '@/pages/TownPage/scene/StaticInstances'
 import { isDrivable } from '@/shared/config/town'
 import { signTexture } from '@/pages/TownPage/scene/textures'
 import { getMaterials, plainMaterial } from '@/pages/TownPage/scene/materials'

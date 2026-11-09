@@ -52,6 +52,7 @@ export function NotificationBell() {
     if (!item.read) markRead(item.id).catch(() => {})
     setOpen(false)
     if (item.orderId) navigate(ROUTES.ORDERS)
+    else if (item.type === 'lesson_quiz') navigate(ROUTES.LESSON_QUIZ)
   }
 
   // Toast only notifications that appear after the first load.
@@ -78,7 +79,10 @@ export function NotificationBell() {
             </span>
           ),
           duration: 7000,
-          action: item.orderId ? { label: "Ko'rish", onClick: () => openItem(item) } : undefined,
+          action:
+            item.orderId || item.type === 'lesson_quiz'
+              ? { label: item.type === 'lesson_quiz' ? 'Boshlash' : "Ko'rish", onClick: () => openItem(item) }
+              : undefined,
         })
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps

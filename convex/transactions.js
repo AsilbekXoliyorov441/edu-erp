@@ -1,13 +1,12 @@
 import { query, mutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { getScopedStudentIdSet, requireStudentOwner } from './lib/scoping'
+import { collectByStudents, getScopedStudentIdSet, requireStudentOwner } from './lib/scoping'
 
 export const list = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const studentIdSet = await getScopedStudentIdSet(ctx, token)
-    const transactions = await ctx.db.query('transactions').collect()
-    return transactions.filter((t) => studentIdSet.has(t.studentId))
+    return await collectByStudents(ctx, 'transactions', studentIdSet)
   },
 })
 

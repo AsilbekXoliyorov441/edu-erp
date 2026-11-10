@@ -17,18 +17,24 @@ export const list = query({
   handler: async (ctx, { token }) => {
     await requirePlatformAdmin(ctx, token)
 
-    const [centers, allTeachers, allGroups, allStudents, allCoinEntries] = await Promise.all([
+    const [centers, allTeachers, allGroups, allStudents] = await Promise.all([
       ctx.db.query('centers').collect(),
       ctx.db.query('teachers').collect(),
       ctx.db.query('groups').collect(),
       ctx.db.query('students').collect(),
-      ctx.db.query('coinEntries').collect(),
     ])
 
     const now = new Date()
     const last30Start = addDays(now, -30).toISOString()
     const prev30Start = addDays(now, -60).toISOString()
     const nowIso = now.toISOString()
+
+    // Only the last 60 days are needed — reading all coin entries ever made grew without
+    // bound and re-ran on every coin given in any center.
+    const allCoinEntries = await ctx.db
+      .query('coinEntries')
+      .withIndex('by_given_at', (q) => q.gte('givenAt', prev30Start))
+      .collect()
 
     return centers.map((center) => {
       const centerTeachers = allTeachers.filter((t) => t.centerId === center._id)

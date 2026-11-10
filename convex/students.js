@@ -1,6 +1,6 @@
 import { query, mutation, internalQuery, internalMutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { getScope, getScopedGroupIdSet, requireGroupOwner, requireStudentOwner } from './lib/scoping'
+import { getScope, getScopedStudents, requireGroupOwner, requireStudentOwner } from './lib/scoping'
 
 /** Never send secrets to the client — only whether a purchase PIN is set. */
 function stripSecrets(student) {
@@ -22,10 +22,8 @@ function stripCredentials(student) {
 export const list = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const groupIdSet = await getScopedGroupIdSet(ctx, token)
-    const students = await ctx.db.query('students').collect()
-    const scoped = students.filter((s) => groupIdSet.has(s.groupId))
-    return scoped.map(stripCredentials)
+    const students = await getScopedStudents(ctx, token)
+    return students.map(stripCredentials)
   },
 })
 
@@ -34,10 +32,8 @@ export const list = query({
 export const listForTeacher = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const groupIdSet = await getScopedGroupIdSet(ctx, token)
-    const students = await ctx.db.query('students').collect()
-    const scoped = students.filter((s) => groupIdSet.has(s.groupId))
-    return scoped.map(stripSecrets)
+    const students = await getScopedStudents(ctx, token)
+    return students.map(stripSecrets)
   },
 })
 

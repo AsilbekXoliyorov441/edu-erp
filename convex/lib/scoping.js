@@ -59,27 +59,78 @@ export async function getCenterTeacherIdSet(ctx, centerId) {
   return new Set(teachers.map((t) => t._id))
 }
 
-export async function getScopedGroupIdSet(ctx, token) {
+/** The caller's groups, read through indexes only. A full-table `.collect()` here would
+ * read every center's rows and re-run on every write anywhere — that burns the Convex
+ * bandwidth quota, so keep all reads in this file indexed. */
+export async function getScopedGroups(ctx, token) {
   const scope = await getScope(ctx, token)
   if (scope.platformAdmin) throw new ConvexError("Platforma SuperAdmin guruhlarga to'g'ridan-to'g'ri kira olmaydi")
 
-  if (scope.all) {
-    const teacherIds = await getCenterTeacherIdSet(ctx, scope.centerId)
-    const groups = await ctx.db.query('groups').collect()
-    return new Set(groups.filter((g) => g.teacherId && teacherIds.has(g.teacherId)).map((g) => g._id))
-  }
+  const teacherIds = scope.all ? [...(await getCenterTeacherIdSet(ctx, scope.centerId))] : [scope.teacherId]
+  const perTeacher = await Promise.all(
+    teacherIds
+      .filter(Boolean)
+      .map((teacherId) =>
+        ctx.db
+          .query('groups')
+          .withIndex('by_teacher', (q) => q.eq('teacherId', teacherId))
+          .collect(),
+      ),
+  )
+  return perTeacher.flat()
+}
 
-  const groups = await ctx.db
-    .query('groups')
-    .withIndex('by_teacher', (q) => q.eq('teacherId', scope.teacherId))
-    .collect()
+export async function getScopedGroupIdSet(ctx, token) {
+  const groups = await getScopedGroups(ctx, token)
   return new Set(groups.map((g) => g._id))
 }
 
+/** Every student in the given groups, via the `by_group` index. */
+export async function getStudentsInGroups(ctx, groupIds) {
+  const perGroup = await Promise.all(
+    [...groupIds].map((groupId) =>
+      ctx.db
+        .query('students')
+        .withIndex('by_group', (q) => q.eq('groupId', groupId))
+        .collect(),
+    ),
+  )
+  return perGroup.flat()
+}
+
+export async function getScopedStudents(ctx, token) {
+  return await getStudentsInGroups(ctx, await getScopedGroupIdSet(ctx, token))
+}
+
 export async function getScopedStudentIdSet(ctx, token) {
-  const groupIdSet = await getScopedGroupIdSet(ctx, token)
-  const students = await ctx.db.query('students').collect()
-  return new Set(students.filter((s) => groupIdSet.has(s.groupId)).map((s) => s._id))
+  const students = await getScopedStudents(ctx, token)
+  return new Set(students.map((s) => s._id))
+}
+
+/** Rows of a table that has a `by_student` index, for many students at once. */
+export async function collectByStudents(ctx, table, studentIds) {
+  const perStudent = await Promise.all(
+    [...studentIds].map((studentId) =>
+      ctx.db
+        .query(table)
+        .withIndex('by_student', (q) => q.eq('studentId', studentId))
+        .collect(),
+    ),
+  )
+  return perStudent.flat()
+}
+
+/** Rows of a table that has a `by_group` index, for many groups at once. */
+export async function collectByGroups(ctx, table, groupIds) {
+  const perGroup = await Promise.all(
+    [...groupIds].map((groupId) =>
+      ctx.db
+        .query(table)
+        .withIndex('by_group', (q) => q.eq('groupId', groupId))
+        .collect(),
+    ),
+  )
+  return perGroup.flat()
 }
 
 export async function requireGroupOwner(ctx, token, groupId) {

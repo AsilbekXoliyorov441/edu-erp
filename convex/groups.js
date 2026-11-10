@@ -1,13 +1,11 @@
 import { query, mutation, internalQuery } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { getScopedGroupIdSet, requireGroupOwner, getScope } from './lib/scoping'
+import { getScopedGroups, requireGroupOwner, getScope } from './lib/scoping'
 
 export const list = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const groupIdSet = await getScopedGroupIdSet(ctx, token)
-    const groups = await ctx.db.query('groups').collect()
-    return groups.filter((g) => groupIdSet.has(g._id))
+    return await getScopedGroups(ctx, token)
   },
 })
 

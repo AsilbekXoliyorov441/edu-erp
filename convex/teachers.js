@@ -11,14 +11,21 @@ export const list = query({
       .query('teachers')
       .withIndex('by_center', (q) => q.eq('centerId', caller.centerId))
       .collect()
-    const groups = await ctx.db.query('groups').collect()
+    const groupCounts = new Map(
+      await Promise.all(
+        teachers.map(async (t) => [
+          t._id,
+          (await ctx.db.query('groups').withIndex('by_teacher', (q) => q.eq('teacherId', t._id)).collect()).length,
+        ]),
+      ),
+    )
     return teachers.map((t) => ({
       id: t._id,
       username: t.username,
       fullName: t.fullName,
       tenantRole: t.role ?? (t.isSuperAdmin ? 'director' : 'teacher'),
       isSuperAdmin: t.role === 'director' || t.role === 'edu_admin' || !!t.isSuperAdmin,
-      groupCount: groups.filter((g) => g.teacherId === t._id).length,
+      groupCount: groupCounts.get(t._id) ?? 0,
     }))
   },
 })

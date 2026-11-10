@@ -1,6 +1,7 @@
 import { query, mutation } from './_generated/server'
 import { v } from 'convex/values'
 import { requireTeacher } from './lib/authz'
+import { collectByGroups, collectByStudents, getStudentsInGroups } from './lib/scoping'
 
 /** Gathers everything owned by one teacher (via groupId -> group.teacherId), regardless
  * of whether the caller is a superadmin. Superadmin's global read access (groups/students/
@@ -8,13 +9,16 @@ import { requireTeacher } from './lib/authz'
  * import are destructive personal-backup tools, and must never operate on another
  * teacher's data even when the caller can otherwise see it all. */
 async function collectForTeacher(ctx, teacherId) {
-  const groups = (await ctx.db.query('groups').collect()).filter((g) => g.teacherId === teacherId)
+  const groups = await ctx.db
+    .query('groups')
+    .withIndex('by_teacher', (q) => q.eq('teacherId', teacherId))
+    .collect()
   const groupIdSet = new Set(groups.map((g) => g._id))
-  const students = (await ctx.db.query('students').collect()).filter((s) => groupIdSet.has(s.groupId))
+  const students = await getStudentsInGroups(ctx, groupIdSet)
   const studentIdSet = new Set(students.map((s) => s._id))
-  const lessons = (await ctx.db.query('lessons').collect()).filter((l) => groupIdSet.has(l.groupId))
-  const coinEntries = (await ctx.db.query('coinEntries').collect()).filter((e) => studentIdSet.has(e.studentId))
-  const transactions = (await ctx.db.query('transactions').collect()).filter((t) => studentIdSet.has(t.studentId))
+  const lessons = await collectByGroups(ctx, 'lessons', groupIdSet)
+  const coinEntries = await collectByStudents(ctx, 'coinEntries', studentIdSet)
+  const transactions = await collectByStudents(ctx, 'transactions', studentIdSet)
   return { groups, students, lessons, coinEntries, transactions }
 }
 

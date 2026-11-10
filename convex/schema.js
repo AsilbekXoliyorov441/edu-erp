@@ -102,7 +102,8 @@ export default defineSchema({
     givenAt: v.string(),
   })
     .index('by_lesson', ['lessonId'])
-    .index('by_student', ['studentId']),
+    .index('by_student', ['studentId'])
+    .index('by_given_at', ['givenAt']),
 
   /** One row per (lesson, student) — written only alongside `lessons.saveSession`, same
    * atomic-per-session-write pattern as `coinEntries`. Lessons saved before this feature

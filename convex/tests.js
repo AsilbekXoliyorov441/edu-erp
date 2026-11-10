@@ -15,35 +15,49 @@ export const listForTeacher = query({
     const scope = await getScope(ctx, token)
     requireTeacherScope(scope)
 
-    const allTests = await ctx.db.query('tests').collect()
-    let tests
-    if (scope.all) {
-      const teacherIds = await getCenterTeacherIdSet(ctx, scope.centerId)
-      tests = allTests.filter((t) => teacherIds.has(t.teacherId))
-    } else {
-      tests = allTests.filter((t) => t.teacherId === scope.teacherId)
+    const teacherIds = scope.all ? [...(await getCenterTeacherIdSet(ctx, scope.centerId))] : [scope.teacherId]
+    const tests = (
+      await Promise.all(
+        teacherIds.map((teacherId) =>
+          ctx.db
+            .query('tests')
+            .withIndex('by_teacher', (q) => q.eq('teacherId', teacherId))
+            .collect(),
+        ),
+      )
+    ).flat()
+
+    const byTest = (table, testId) =>
+      ctx.db
+        .query(table)
+        .withIndex('by_test', (q) => q.eq('testId', testId))
+        .collect()
+
+    const groupNameCache = new Map()
+    const groupName = async (id) => {
+      if (!groupNameCache.has(id)) groupNameCache.set(id, ctx.db.get(id).then((g) => g?.name))
+      return await groupNameCache.get(id)
     }
 
-    const questions = await ctx.db.query('testQuestions').collect()
-    const assignments = await ctx.db.query('testAssignments').collect()
-
-    const groups = await ctx.db.query('groups').collect()
-    const groupName = new Map(groups.map((g) => [g._id, g.name]))
-    const attempts = await ctx.db.query('testAttempts').collect()
-
-    return tests
-      .map((t) => {
-        const groupIds = assignments.filter((a) => a.testId === t._id).map((a) => a.groupId)
+    const rows = await Promise.all(
+      tests.map(async (t) => {
+        const [questions, assignments, attempts] = await Promise.all([
+          byTest('testQuestions', t._id),
+          byTest('testAssignments', t._id),
+          byTest('testAttempts', t._id),
+        ])
+        const groupIds = assignments.map((a) => a.groupId)
         return {
           ...t,
-          questionCount: questions.filter((q) => q.testId === t._id).length,
+          questionCount: questions.length,
           groupCount: groupIds.length,
           groupIds,
-          groupNames: groupIds.map((id) => groupName.get(id)).filter(Boolean),
-          attemptCount: attempts.filter((a) => a.testId === t._id).length,
+          groupNames: (await Promise.all(groupIds.map(groupName))).filter(Boolean),
+          attemptCount: attempts.length,
         }
-      })
-      .sort((a, b) => b._creationTime - a._creationTime)
+      }),
+    )
+    return rows.sort((a, b) => b._creationTime - a._creationTime)
   },
 })
 

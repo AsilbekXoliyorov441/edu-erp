@@ -1,6 +1,6 @@
 import { query, internalMutation } from './_generated/server'
 import { v } from 'convex/values'
-import { getScopedStudentIdSet } from './lib/scoping'
+import { collectByStudents, getScopedStudentIdSet } from './lib/scoping'
 import {
   computeMonthlyProgress,
   getMonthKey,
@@ -14,8 +14,7 @@ export const listResults = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const studentIdSet = await getScopedStudentIdSet(ctx, token)
-    const results = await ctx.db.query('monthlyGoalResults').collect()
-    return results.filter((r) => studentIdSet.has(r.studentId))
+    return await collectByStudents(ctx, 'monthlyGoalResults', studentIdSet)
   },
 })
 

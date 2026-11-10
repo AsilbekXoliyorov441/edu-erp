@@ -3,6 +3,14 @@ import { v } from 'convex/values'
 import { requireTestOwner, requireGroupOwner } from './lib/scoping'
 import { requireSession } from './lib/authz'
 
+async function countQuestions(ctx, testId) {
+  const questions = await ctx.db
+    .query('testQuestions')
+    .withIndex('by_test', (q) => q.eq('testId', testId))
+    .collect()
+  return questions.length
+}
+
 async function findAssignment(ctx, testId, groupId) {
   return await ctx.db
     .query('testAssignments')
@@ -35,11 +43,8 @@ export const listForGroup = query({
       .query('testAssignments')
       .withIndex('by_group', (q) => q.eq('groupId', groupId))
       .collect()
-    const questions = await ctx.db.query('testQuestions').collect()
-    const tests = await Promise.all(assignments.map((a) => ctx.db.get(a.testId)))
-    return tests
-      .filter(Boolean)
-      .map((t) => ({ ...t, questionCount: questions.filter((q) => q.testId === t._id).length }))
+    const tests = (await Promise.all(assignments.map((a) => ctx.db.get(a.testId)))).filter(Boolean)
+    return await Promise.all(tests.map(async (t) => ({ ...t, questionCount: await countQuestions(ctx, t._id) })))
   },
 })
 
@@ -56,11 +61,8 @@ export const listForMyGroup = query({
       .query('testAssignments')
       .withIndex('by_group', (q) => q.eq('groupId', student.groupId))
       .collect()
-    const questions = await ctx.db.query('testQuestions').collect()
-    const tests = await Promise.all(assignments.map((a) => ctx.db.get(a.testId)))
-    return tests
-      .filter(Boolean)
-      .map((t) => ({ ...t, questionCount: questions.filter((q) => q.testId === t._id).length }))
+    const tests = (await Promise.all(assignments.map((a) => ctx.db.get(a.testId)))).filter(Boolean)
+    return await Promise.all(tests.map(async (t) => ({ ...t, questionCount: await countQuestions(ctx, t._id) })))
   },
 })
 

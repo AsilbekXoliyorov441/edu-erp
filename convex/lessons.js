@@ -1,6 +1,6 @@
 import { query, mutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { getScopedGroupIdSet, requireGroupOwner, requireLessonOwner } from './lib/scoping'
+import { collectByGroups, collectByStudents, getScopedGroupIdSet, requireGroupOwner, requireLessonOwner } from './lib/scoping'
 import { COIN_CATEGORY_LIST, LESSONS_PER_MONTH } from '../src/shared/config/constants'
 import { getDayKey } from '../src/shared/lib/stats/monthlyGoal.js'
 
@@ -10,8 +10,7 @@ export const list = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const groupIdSet = await getScopedGroupIdSet(ctx, token)
-    const lessons = await ctx.db.query('lessons').collect()
-    return lessons.filter((l) => groupIdSet.has(l.groupId))
+    return await collectByGroups(ctx, 'lessons', groupIdSet)
   },
 })
 
@@ -94,15 +93,24 @@ export const removeCascade = mutation({
     for (const id of ids) await requireLessonOwner(ctx, token, id)
     const lessonIdSet = new Set(ids)
 
-    const allEntries = await ctx.db.query('coinEntries').collect()
-    const entriesToDelete = allEntries.filter((e) => lessonIdSet.has(e.lessonId))
+    const byLesson = (table) =>
+      Promise.all(
+        [...lessonIdSet].map((lessonId) =>
+          ctx.db
+            .query(table)
+            .withIndex('by_lesson', (q) => q.eq('lessonId', lessonId))
+            .collect(),
+        ),
+      ).then((rows) => rows.flat())
+
+    const entriesToDelete = await byLesson('coinEntries')
     const entryIdSet = new Set(entriesToDelete.map((e) => e._id))
 
-    const allTransactions = await ctx.db.query('transactions').collect()
-    const transactionsToDelete = allTransactions.filter((t) => t.relatedEntryId && entryIdSet.has(t.relatedEntryId))
+    const affectedStudentIds = new Set(entriesToDelete.map((e) => e.studentId))
+    const studentTransactions = await collectByStudents(ctx, 'transactions', affectedStudentIds)
+    const transactionsToDelete = studentTransactions.filter((t) => t.relatedEntryId && entryIdSet.has(t.relatedEntryId))
 
-    const allAttendance = await ctx.db.query('attendance').collect()
-    const attendanceToDelete = allAttendance.filter((a) => lessonIdSet.has(a.lessonId))
+    const attendanceToDelete = await byLesson('attendance')
 
     for (const txn of transactionsToDelete) await ctx.db.delete(txn._id)
     for (const entry of entriesToDelete) await ctx.db.delete(entry._id)

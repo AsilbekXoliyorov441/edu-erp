@@ -300,6 +300,19 @@ export default defineSchema({
    * stake, learning score). Shared queries read this instead of `townPlayers`, whose rows
    * change on every money move, so one player's activity doesn't re-run everyone's map.
    * Kept in sync by `syncRoster` in `town.js`. */
+  /** Per-student totals derived from `transactions` / `coinEntries` — see
+   * `convex/lib/studentStats.js`. The leaderboard reads these instead of the full history. */
+  studentStats: defineTable({
+    studentId: v.id('students'),
+    groupId: v.id('groups'),
+    balance: v.number(),
+    /** Coins earned per course month (`lessons.monthIndex`, as a string key). */
+    earnedByMonth: v.record(v.string(), v.number()),
+    updatedAt: v.number(),
+  })
+    .index('by_student', ['studentId'])
+    .index('by_group', ['groupId']),
+
   townRoster: defineTable({
     townKey: v.string(),
     playerId: v.id('townPlayers'),

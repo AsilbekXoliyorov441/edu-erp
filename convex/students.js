@@ -1,5 +1,6 @@
 import { query, mutation, internalQuery, internalMutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
+import { refreshStudentStats } from './lib/studentStats'
 import { getScope, getScopedStudents, requireGroupOwner, requireStudentOwner, requireSuperAdmin } from './lib/scoping'
 import { resolveSession } from './lib/authz'
 
@@ -245,6 +246,7 @@ export const transfer = mutation({
       }
       await ctx.db.patch(studentId, { groupId: targetGroupId })
     }
+    await refreshStudentStats(ctx, [...studentIds, ...duplicateByStudent.values()])
 
     return { moved: studentIds.length, merged: duplicateByStudent.size, mergedCoins }
   },

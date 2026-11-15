@@ -120,6 +120,17 @@ export async function collectByStudents(ctx, table, studentIds) {
   return perStudent.flat()
 }
 
+/** History rows (`transactions` / `coinEntries` / `attendance`) the caller may load. A
+ * student gets only their own — the leaderboard comes from `studentStats` — so opening the
+ * app doesn't download every classmate's history. Teachers get their whole scope. */
+export async function collectScopedHistory(ctx, token, table) {
+  const scope = await getScope(ctx, token)
+  if (!scope.platformAdmin && scope.session.role === 'student') {
+    return await collectByStudents(ctx, table, [scope.session.userId])
+  }
+  return await collectByStudents(ctx, table, await getScopedStudentIdSet(ctx, token))
+}
+
 /** Rows of a table that has a `by_group` index, for many groups at once. */
 export async function collectByGroups(ctx, table, groupIds) {
   const perGroup = await Promise.all(

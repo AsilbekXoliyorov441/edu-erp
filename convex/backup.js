@@ -1,6 +1,7 @@
 import { query, mutation } from './_generated/server'
 import { v } from 'convex/values'
 import { requireTeacher } from './lib/authz'
+import { refreshStudentStats } from './lib/studentStats'
 import { collectByGroups, collectByStudents, getStudentsInGroups } from './lib/scoping'
 
 /** Gathers everything owned by one teacher (via groupId -> group.teacherId), regardless
@@ -147,5 +148,6 @@ export const importAll = mutation({
         timestamp: t.timestamp,
       })
     }
+    await refreshStudentStats(ctx, [...studentIdMap.values()])
   },
 })

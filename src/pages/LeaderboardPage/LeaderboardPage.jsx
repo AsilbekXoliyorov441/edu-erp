@@ -12,9 +12,8 @@ import { useAuthStore } from '@/entities/session/model/store'
 import { useGroupStore } from '@/entities/group/model/store'
 import { useStudentStore } from '@/entities/student/model/store'
 import { useLessonStore } from '@/entities/lesson/model/store'
-import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
-import { useTransactionStore } from '@/entities/transaction/model/store'
-import { getLeaderboard, getLeaderboardByPeriod } from '@/shared/lib/stats'
+import { useStudentStats } from '@/entities/student-stats/model/store'
+import { getLeaderboardFromStats } from '@/shared/lib/stats'
 import { ROLES, ROUTES } from '@/shared/config/constants'
 import { cn } from '@/shared/lib/utils'
 
@@ -30,8 +29,7 @@ export function LeaderboardPage() {
   const groups = useGroupStore((s) => s.items)
   const students = useStudentStore((s) => s.items)
   const lessons = useLessonStore((s) => s.items)
-  const coinEntries = useCoinEntryStore((s) => s.items)
-  const transactions = useTransactionStore((s) => s.items)
+  const stats = useStudentStats()
 
   const [groupId, setGroupId] = useState('all')
   const [period, setPeriod] = useState('all')
@@ -39,13 +37,14 @@ export function LeaderboardPage() {
   const monthOptions = useMemo(() => [...new Set(lessons.map((l) => l.monthIndex))].sort((a, b) => a - b), [lessons])
   const scopedGroupId = groupId === 'all' ? undefined : groupId
 
-  const ranking = useMemo(() => {
-    if (period === 'all') return getLeaderboard(students, transactions, { groupId: scopedGroupId })
-    return getLeaderboardByPeriod(students, coinEntries, lessons, {
-      groupId: scopedGroupId,
-      monthIndex: Number(period),
-    })
-  }, [period, students, transactions, coinEntries, lessons, scopedGroupId])
+  const ranking = useMemo(
+    () =>
+      getLeaderboardFromStats(students, stats, {
+        groupId: scopedGroupId,
+        monthIndex: period === 'all' ? undefined : Number(period),
+      }),
+    [period, students, stats, scopedGroupId],
+  )
 
   return (
     <div className="space-y-5">

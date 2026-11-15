@@ -2,6 +2,7 @@ import { query, mutation, internalQuery, internalMutation } from './_generated/s
 import { v, ConvexError } from 'convex/values'
 import { getScope, requireStudentOwner } from './lib/scoping'
 import { notify, getOrderHandlerIds } from './lib/notify'
+import { refreshStudentStats } from './lib/studentStats'
 
 /** Orders a student can have waiting at once — stops one session from flooding the queue. */
 const MAX_PENDING_ORDERS = 3
@@ -248,6 +249,7 @@ export const markOrdered = mutation({
       timestamp: new Date(now).toISOString(),
     })
     await ctx.db.patch(orderId, { status: 'ordered', orderedAt: now, handledBy: scope.session.userId, transactionId })
+    await refreshStudentStats(ctx, [order.studentId])
     await notify(ctx, [order.studentId], {
       type: 'order_ordered',
       title: 'Buyurtmangiz qabul qilindi',

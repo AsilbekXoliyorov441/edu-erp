@@ -1,12 +1,12 @@
 import { query, mutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { collectByStudents, getScopedStudentIdSet, requireStudentOwner } from './lib/scoping'
+import { collectScopedHistory, requireStudentOwner } from './lib/scoping'
+import { refreshStudentStats } from './lib/studentStats'
 
 export const list = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const studentIdSet = await getScopedStudentIdSet(ctx, token)
-    return await collectByStudents(ctx, 'transactions', studentIdSet)
+    return await collectScopedHistory(ctx, token, 'transactions')
   },
 })
 
@@ -42,5 +42,6 @@ export const redeemGift = mutation({
       relatedGiftId: giftId,
       timestamp: new Date().toISOString(),
     })
+    await refreshStudentStats(ctx, [studentId])
   },
 })

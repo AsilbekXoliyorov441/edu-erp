@@ -30,7 +30,8 @@ import { useCoinEntryStore } from '@/entities/coin-entry/model/store'
 import { useTransactionStore } from '@/entities/transaction/model/store'
 import { useGiftStore } from '@/entities/gift/model/store'
 import { useAttendanceStore } from '@/entities/attendance/model/store'
-import { getStudentBalance, getLeaderboard } from '@/shared/lib/stats'
+import { getStudentBalance, getLeaderboardFromStats } from '@/shared/lib/stats'
+import { useStudentStats } from '@/entities/student-stats/model/store'
 import { formatUzDate } from '@/shared/lib/date'
 import { ROLES, ROUTES } from '@/shared/config/constants'
 
@@ -48,6 +49,7 @@ export function StudentProfilePage() {
   const gifts = useGiftStore((s) => s.items)
   const attendance = useAttendanceStore((s) => s.items)
   const { items: orders } = useGiftOrders()
+  const stats = useStudentStats()
 
   const isBlocked = role === ROLES.STUDENT && studentId !== userId
 
@@ -76,7 +78,7 @@ export function StudentProfilePage() {
 
   const group = groups.find((g) => g.id === student.groupId)
   const balance = getStudentBalance(student.id, transactions)
-  const rankEntry = getLeaderboard(students, transactions, { groupId: student.groupId }).find(
+  const rankEntry = getLeaderboardFromStats(students, stats, { groupId: student.groupId }).find(
     (e) => e.student.id === student.id,
   )
   const canManage = role === ROLES.TEACHER

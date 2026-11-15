@@ -34,3 +34,18 @@ export function getLeaderboardByPeriod(students, coinEntries, lessons, { groupId
     .sort((a, b) => b.total - a.total)
     .map((entry, index) => ({ ...entry, rank: index + 1 }))
 }
+
+/** Ranking from the precomputed `studentStats` rows (see `useStudentStats`): lifetime
+ * balance, or coins earned in one course month when `monthIndex` is given. */
+export function getLeaderboardFromStats(students, statsById, { groupId, monthIndex } = {}) {
+  return students
+    .filter((s) => s.status === STUDENT_STATUS.ACTIVE)
+    .filter((s) => (groupId ? s.groupId === groupId : true))
+    .map((student) => {
+      const row = statsById.get(student.id)
+      const total = monthIndex ? (row?.earnedByMonth?.[String(monthIndex)] ?? 0) : (row?.balance ?? 0)
+      return { student, total }
+    })
+    .sort((a, b) => b.total - a.total)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }))
+}

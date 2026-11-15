@@ -1,6 +1,7 @@
 import { query, internalMutation } from './_generated/server'
 import { v } from 'convex/values'
 import { collectByStudents, getScopedStudentIdSet } from './lib/scoping'
+import { refreshStudentStats } from './lib/studentStats'
 import {
   computeMonthlyProgress,
   getMonthKey,
@@ -80,6 +81,7 @@ export const closeMonth = internalMutation({
             timestamp: now,
           })
           burnedStudents += 1
+          await refreshStudentStats(ctx, [studentId])
         }
       }
 

@@ -3,6 +3,7 @@ import { v, ConvexError } from 'convex/values'
 import { collectByGroups, collectByStudents, getScopedGroupIdSet, requireGroupOwner, requireLessonOwner } from './lib/scoping'
 import { COIN_CATEGORY_LIST, LESSONS_PER_MONTH } from '../src/shared/config/constants'
 import { getDayKey } from '../src/shared/lib/stats/monthlyGoal.js'
+import { refreshStudentStats } from './lib/studentStats'
 
 const CATEGORY_MAX = Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, c.max]))
 
@@ -82,6 +83,8 @@ export const saveSession = mutation({
       else if (record.status === 'absent') absentCount += 1
     }
 
+    await refreshStudentStats(ctx, scores.map((s) => s.studentId))
+
     return { lessonId, lessonNumber, monthIndex, entriesCount, coinsGiven, presentCount, lateCount, absentCount }
   },
 })
@@ -116,5 +119,6 @@ export const removeCascade = mutation({
     for (const entry of entriesToDelete) await ctx.db.delete(entry._id)
     for (const record of attendanceToDelete) await ctx.db.delete(record._id)
     for (const lessonId of ids) await ctx.db.delete(lessonId)
+    await refreshStudentStats(ctx, [...affectedStudentIds])
   },
 })

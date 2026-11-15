@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toast } from 'sonner'
 import { api } from '@convex/_generated/api'
 import { convexClient } from '@/shared/lib/convex/client'
 
@@ -35,6 +36,30 @@ const LOGGED_OUT_FIELDS = {
   centerName: null,
   centerActive: true,
   coinPriceSom: null,
+}
+
+/** Live check of the current session: when it is deleted on the server (the password was
+ * changed on another device), this device signs out right away. */
+let stopWatch = null
+function watchSession(token, onGone) {
+  stopWatch?.()
+  stopWatch = null
+  if (!token) return
+  const watch = convexClient.watchQuery(api.auth.whoAmI, { token })
+  stopWatch = watch.onUpdate(() => {
+    let who
+    try {
+      who = watch.localQueryResult()
+    } catch {
+      return
+    }
+    if (who === null) onGone()
+  })
+}
+
+function signedOutElsewhere() {
+  useAuthStore.getState().logout()
+  toast.error("Parol almashtirilgani uchun hisobdan chiqarildingiz. Qaytadan kiring.")
 }
 
 export const useAuthStore = create((set, get) => ({
@@ -81,6 +106,7 @@ export const useAuthStore = create((set, get) => ({
       coinPriceSom: who.coinPriceSom ?? null,
       hydrated: true,
     })
+    watchSession(token, signedOutElsewhere)
   },
 
   async loginTeacher(username, password) {
@@ -101,6 +127,7 @@ export const useAuthStore = create((set, get) => ({
       centerActive: true,
       coinPriceSom: result.coinPriceSom ?? null,
     })
+    watchSession(result.token, signedOutElsewhere)
     return { ok: true }
   },
 
@@ -109,10 +136,12 @@ export const useAuthStore = create((set, get) => ({
     if (!result.ok) return { ok: false, error: result.error }
     writeToken(result.token)
     set({ token: result.token, role: result.role, userId: result.userId, fullName: result.fullName, isSuperAdmin: false })
+    watchSession(result.token, signedOutElsewhere)
     return { ok: true }
   },
 
   logout() {
+    watchSession(null)
     const token = get().token
     writeToken(null)
     set({ ...LOGGED_OUT_FIELDS })

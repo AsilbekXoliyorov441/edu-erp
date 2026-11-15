@@ -7,6 +7,8 @@ import { useTownActions } from '@/entities/town/model/store'
 import { BUILDING_KINDS, CAR_MODELS, DISTRICTS, MARKET, PLOT_BY_ID, PLOT_SIZES, estimateValue, formatMoney } from '@/shared/config/town'
 import { cn } from '@/shared/lib/utils'
 
+const DEAL_STARTED = "🤝 Bitim boshlandi! Hujjatlar rasmiylashtirilmoqda — 1 soatdan keyin sizniki bo'ladi"
+
 function usePending() {
   const [busy, setBusy] = useState(false)
   const run = async (fn, okMsg) => {
@@ -85,6 +87,13 @@ export function SellPlotBox({ plotId, owned }) {
   const actions = useTownActions()
   const [run, busy] = usePending()
   const plot = PLOT_BY_ID[plotId]
+  if (owned.inDeal) {
+    return (
+      <p className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+        ⏳ Bu hovli sotilmoqda — bitim jarayonida. Yuqoridagi sariq oynada qancha vaqt qolganini ko'rasiz va kerak bo'lsa bekor qilasiz.
+      </p>
+    )
+  }
   return (
     <PriceSetter
       what="Hovli"
@@ -103,17 +112,24 @@ export function BuyListedPlot({ plotId, owned, money }) {
   const [run, busy] = usePending()
   const plot = PLOT_BY_ID[plotId]
   const k = BUILDING_KINDS[owned.kind ?? 'house']
+  if (owned.inDeal) {
+    return (
+      <p className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+        ⏳ Bu hovlini hozir boshqa xaridor sotib olyapti — bitim rasmiylashtirilmoqda.
+      </p>
+    )
+  }
   return (
     <div className="space-y-2 rounded-xl bg-yellow-50 p-3 dark:bg-yellow-500/10">
       <p className="text-sm font-black">🏷️ Sotuvda: {formatMoney(owned.salePrice)}</p>
       <p className="text-[11px] text-gray-600 dark:text-gray-300">
         Taxminiy qiymati {formatMoney(estimateValue(plot, owned))}
-        {owned.floors ? ` • ${k.icon} ${k.name}, ${owned.floors} qavat` : ''}. Pul to'g'ridan-to'g'ri @{owned.ownerName}ga o'tadi.
+        {owned.floors ? ` • ${k.icon} ${k.name}, ${owned.floors} qavat` : ''}. Xarid 1 soat rasmiylashtiriladi: pulingiz shu vaqt bankda turadi, keyin @{owned.ownerName}ga o'tadi.
       </p>
       <button
         type="button"
         disabled={busy || money < owned.salePrice}
-        onClick={() => run(() => actions.buyListedPlot(plotId, owned.salePrice), `🏡 Hovli №${plot.number} endi sizniki!`)}
+        onClick={() => run(() => actions.buyListedPlot(plotId, owned.salePrice), DEAL_STARTED)}
         className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-yellow-400 font-black text-yellow-950 shadow disabled:opacity-50"
       >
         {busy ? <Loader2 className="size-4 animate-spin" /> : '🤝'} Sotib olish
@@ -179,14 +195,15 @@ export function MarketPanel({ town, onClose, onShowPlot }) {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <p className="font-black text-emerald-600">{formatMoney(p.salePrice)}</p>
+                    {p.inDeal && <span className="rounded bg-amber-400 px-1.5 text-[10px] font-black text-amber-950">SOTILMOQDA</span>}
                     <div className="flex gap-1">
                       <button type="button" onClick={() => onShowPlot(p.plotId)} className="h-8 cursor-pointer rounded-lg bg-gray-100 px-2 text-xs font-bold hover:bg-gray-200 dark:bg-gray-800">
                         Ko'rish
                       </button>
                       <button
                         type="button"
-                        disabled={busy || me.money < p.salePrice}
-                        onClick={() => run(() => actions.buyListedPlot(p.plotId, p.salePrice), `🏡 Hovli №${plot.number} endi sizniki!`)}
+                        disabled={busy || p.inDeal || me.money < p.salePrice}
+                        onClick={() => run(() => actions.buyListedPlot(p.plotId, p.salePrice), DEAL_STARTED)}
                         className="h-8 cursor-pointer rounded-lg bg-yellow-400 px-3 text-xs font-black text-yellow-950 disabled:opacity-40"
                       >
                         Olish
@@ -203,7 +220,6 @@ export function MarketPanel({ town, onClose, onShowPlot }) {
             {cars.length === 0 && <p className="rounded-xl bg-gray-100 p-3 text-sm text-gray-500 dark:bg-gray-900">Hozircha hech kim mashina sotmayapti.</p>}
             {cars.map((p) => {
               const model = CAR_MODELS.find((c) => c.id === p.car.model)
-              const total = p.carSalePrice - tradeIn
               return (
                 <div key={p.id} className="flex items-center gap-3 rounded-2xl border border-gray-200 p-3 dark:border-gray-800">
                   <span className="size-10 shrink-0 rounded-xl shadow-inner" style={{ background: `radial-gradient(circle at 30% 30%, #fff8, ${p.car.color} 50%)` }} />
@@ -211,15 +227,15 @@ export function MarketPanel({ town, onClose, onShowPlot }) {
                     <p className="font-black">{model?.name ?? 'Mashina'}</p>
                     <p className="text-xs text-gray-500">
                       @{p.nickname} • salonda {formatMoney(model?.price ?? 0)}
-                      {tradeIn ? ` • eski mashinangiz −${formatMoney(tradeIn)}` : ''}
+                      {tradeIn ? ` • eski mashinangiz uchun +${formatMoney(tradeIn)} qaytadi` : ''}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <p className="font-black text-emerald-600">{formatMoney(p.carSalePrice)}</p>
                     <button
                       type="button"
-                      disabled={busy || me.money < total}
-                      onClick={() => run(() => actions.buyListedCar(p.id, p.carSalePrice), `🚗 ${model?.name} endi sizniki!`)}
+                      disabled={busy || me.money < p.carSalePrice}
+                      onClick={() => run(() => actions.buyListedCar(p.id, p.carSalePrice), DEAL_STARTED)}
                       className="h-8 cursor-pointer rounded-lg bg-yellow-400 px-3 text-xs font-black text-yellow-950 disabled:opacity-40"
                     >
                       Olish
@@ -243,7 +259,11 @@ export function MarketPanel({ town, onClose, onShowPlot }) {
                 <span className="font-black">{formatMoney(p.salePrice)} →</span>
               </button>
             ))}
-            {me.car ? (
+            {me.car && me.carInDeal ? (
+              <p className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+                ⏳ Mashinangiz sotilmoqda — bitim jarayonida.
+              </p>
+            ) : me.car ? (
               <PriceSetter
                 what="Mashina"
                 suggested={Math.round(((myCarModel?.price ?? 10_000) * 0.75) / 100) * 100}

@@ -34,8 +34,14 @@ export function LoginForm() {
     setError(null)
     setSubmitting(true)
 
-    const result =
-      role === ROLES.TEACHER ? await loginTeacher(identifier, password) : await loginStudent(identifier, password)
+    let result
+    try {
+      result =
+        role === ROLES.TEACHER ? await loginTeacher(identifier, password) : await loginStudent(identifier, password)
+    } catch (err) {
+      console.error('Login failed', err)
+      result = { ok: false, error: "Serverga ulanib bo'lmadi. Internetni tekshirib, qayta urinib ko'ring." }
+    }
     setSubmitting(false)
 
     if (!result.ok) {

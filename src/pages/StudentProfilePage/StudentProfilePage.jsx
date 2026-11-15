@@ -18,6 +18,8 @@ import { RedeemGiftDialog } from '@/features/redeem-gift/ui/RedeemGiftDialog'
 import { AvatarRemoveButton, AvatarUploadButton } from '@/features/upload-avatar/ui/AvatarUploadButton'
 import { OrderGiftDialog } from '@/features/order-gift/ui/OrderGiftDialog'
 import { ResetPinButton } from '@/features/manage-orders/ui/ResetPinButton'
+import { ChangePasswordDialog } from '@/features/change-password/ui/ChangePasswordDialog'
+import { RevealPasswordButton } from '@/features/change-password/ui/RevealPasswordButton'
 import { useGiftOrders } from '@/entities/gift-order/model/store'
 import { getReservedCoins } from '@/entities/gift-order/model/status'
 import { useAuthStore } from '@/entities/session/model/store'
@@ -36,6 +38,7 @@ export function StudentProfilePage() {
   const { studentId } = useParams()
   const role = useAuthStore((s) => s.role)
   const userId = useAuthStore((s) => s.userId)
+  const isAdmin = useAuthStore((s) => s.isSuperAdmin)
 
   const students = useStudentStore((s) => s.items)
   const groups = useGroupStore((s) => s.items)
@@ -130,6 +133,16 @@ export function StudentProfilePage() {
             {canManage && student.hasPurchasePin && (
               <div className="mt-2 flex justify-center sm:justify-end">
                 <ResetPinButton student={student} />
+              </div>
+            )}
+            {isSelf && (
+              <div className="mt-2 flex justify-center sm:justify-end">
+                <ChangePasswordDialog />
+              </div>
+            )}
+            {canManage && isAdmin && (
+              <div className="mt-2">
+                <RevealPasswordButton student={student} />
               </div>
             )}
           </div>

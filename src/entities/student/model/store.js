@@ -24,3 +24,14 @@ export function useStudentStore(selector) {
       transferMutation({ token, targetGroupId, studentIds, merges }),
   })
 }
+
+/** Password actions: a student changes their own; a center admin reveals a student's. */
+export function useStudentPasswordActions() {
+  const token = useAuthStore((s) => s.token)
+  const changeAction = useAction(api.studentsActions.changeMyPassword)
+  const revealAction = useAction(api.studentsActions.revealPassword)
+  return {
+    changeMyPassword: (currentPassword, newPassword) => changeAction({ token, currentPassword, newPassword }),
+    revealPassword: (studentId) => revealAction({ token, studentId }),
+  }
+}

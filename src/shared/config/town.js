@@ -874,7 +874,7 @@ export const SHOP_ITEMS = {
   palov: { place: 'choyxona', name: 'Osh (palov)', icon: '🍛', price: 2_000, buff: 'scholar', minutes: 20, desc: 'Kutubxona puli ×1.5 — 20 daqiqa' },
   choy: { place: 'choyxona', name: "Ko'k choy", icon: '🫖', price: 400, buff: 'scholar', minutes: 5, desc: 'Kutubxona puli ×1.5 — 5 daqiqa' },
   kit: { place: 'supermarket', name: "Qurilish to'plami", icon: '🧰', price: 3_000, buff: 'builder', uses: 1, desc: 'Keyingi qurilish bosqichi 25% arzon' },
-  dinner: { place: 'restaurant', name: 'Oilaviy kechki ovqat', icon: '🍽️', price: 5_000, buff: 'driver', minutes: 20, desc: 'Taksi daromadi +25% — 20 daqiqa' },
+  dinner: { place: 'restaurant', name: 'Oilaviy kechki ovqat', icon: '🍽️', price: 5_000, buff: 'scholar', minutes: 45, desc: 'Kutubxona puli ×1.5 — 45 daqiqa' },
 }
 
 /** Islamic bank — no interest (riba). Three services:
@@ -1174,3 +1174,59 @@ export const LAMP_COLS = [
 export const RING_SIDE_LAMP_Z = [-62, -21, 21, 62]
 /** Lamps on the expressway decks. */
 export const DECK_LAMP_Z = [-87.5, -62.5, -37.5, -12.5, 12.5, 37.5, 62.5, 87.5]
+
+/* ------------------------------------------------------------------ car income ------- */
+
+/** A car is an asset, not something to drive: it earns this share of its showroom price
+ * every hour (collected by the owner, capped at `INCOME_CAP_H` hours like buildings). */
+export const CAR_INCOME_RATE = 0.005
+
+export function carIncomePerHour(model) {
+  const car = CAR_MODELS.find((c) => c.id === model)
+  return car ? Math.round(car.price * CAR_INCOME_RATE) : 0
+}
+
+/** Income piled up on a car since `since` (ms). Never collected yet → a full day's worth. */
+export function pendingCarIncome(model, since, now) {
+  const perHour = carIncomePerHour(model)
+  if (!perHour) return 0
+  const hours = since ? Math.min(INCOME_CAP_H, Math.max(0, now - since) / 3_600_000) : INCOME_CAP_H
+  return Math.floor(perHour * hours)
+}
+
+/* ------------------------------------------------------------------ deals ------------ */
+
+/** Buying from another player is not instant: like a real purchase, the deal goes through
+ * paperwork for an hour. The buyer's money is held by the bank meanwhile, and the owner can
+ * stop the deal ("this wasn't me") until it closes. */
+export const DEAL = {
+  MS: 60 * 60_000,
+  STEPS: [
+    { from: 0, icon: '📄', title: 'Hujjatlar tekshirilmoqda', desc: "Oldi-sotdi shartnomasi tayyorlanmoqda, tomonlarning shaxsi tekshirilmoqda" },
+    { from: 0.25, icon: '✍️', title: 'Notarius tasdiqlamoqda', desc: 'Notarius shartnomani ko‘rib chiqib, imzolarni tasdiqlayapti' },
+    { from: 0.5, icon: '🏦', title: 'Bank to‘lovni tekshirmoqda', desc: "Xaridorning puli bankda saqlanmoqda — bitim tugagach sotuvchiga o'tkaziladi" },
+    { from: 0.8, icon: '🏛️', title: 'Kadastrda ro‘yxatdan o‘tkazilmoqda', desc: "Mulk yangi egasi nomiga rasmiylashtirilmoqda" },
+  ],
+}
+
+/** The step a deal is on, from how much of its hour has passed. */
+export function dealStep(createdAt, closesAt, now) {
+  const frac = Math.min(1, Math.max(0, (now - createdAt) / Math.max(1, closesAt - createdAt)))
+  let index = 0
+  DEAL.STEPS.forEach((st, i) => {
+    if (frac >= st.from) index = i
+  })
+  return { index, frac }
+}
+
+/* ------------------------------------------------------------------ insurance -------- */
+
+/** Property insurance: a one-time premium of `RATE` × the insured value. If the insured plot
+ * is then sold for less than that value, the owner files a claim; a center admin reviews it
+ * and the insurance company pays the difference. */
+export const INSURANCE = { RATE: 0.05 }
+
+/** Premium to insure `value` (or raise existing cover `insuredValue` up to it). */
+export function insurancePremium(value, insuredValue = 0) {
+  return Math.max(0, Math.round(((value - insuredValue) * INSURANCE.RATE) / 100) * 100)
+}

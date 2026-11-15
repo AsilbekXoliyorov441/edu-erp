@@ -74,6 +74,7 @@ export const ROUTES = {
   studentProfile: (id) => `/oquvchi/${id}`,
   COIN_MARKET: '/coin-market',
   ORDERS: '/buyurtmalar',
+  INSURANCE: '/sugurta',
   LEADERBOARD: '/reyting',
   SETTINGS: '/sozlamalar',
   TEACHERS_DASHBOARD: '/teachers-dashboard',

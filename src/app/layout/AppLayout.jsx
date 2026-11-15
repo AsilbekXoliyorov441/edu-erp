@@ -6,6 +6,7 @@ import { PageTransition } from '@/app/layout/PageTransition'
 import { LiveGameBanner } from '@/widgets/LiveGameBanner/LiveGameBanner'
 import { LessonQuizBanner } from '@/widgets/LessonQuizBanner/LessonQuizBanner'
 import { SilentBoundary } from '@/shared/ui/silent-boundary'
+import { TownDealBanner } from '@/widgets/TownDealBanner/TownDealBanner'
 
 export function AppLayout() {
   return (
@@ -17,6 +18,9 @@ export function AppLayout() {
           <main className="flex-1 px-4 pb-24 pt-4 sm:px-6 lg:px-[28px] lg:pb-[24px] lg:pt-[24px]">
             <SilentBoundary>
               <LiveGameBanner />
+            </SilentBoundary>
+            <SilentBoundary>
+              <TownDealBanner className="mb-4" />
             </SilentBoundary>
             <SilentBoundary>
               <LessonQuizBanner />

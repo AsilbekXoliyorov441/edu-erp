@@ -1,11 +1,13 @@
 import { query, mutation, internalQuery, internalMutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
-import { getScope, getScopedStudents, requireGroupOwner, requireStudentOwner } from './lib/scoping'
+import { getScope, getScopedStudents, requireGroupOwner, requireStudentOwner, requireSuperAdmin } from './lib/scoping'
+import { resolveSession } from './lib/authz'
 
 /** Never send secrets to the client — only whether a purchase PIN is set. */
 function stripSecrets(student) {
   const rest = { ...student, hasPurchasePin: Boolean(student.purchasePinHash) }
   delete rest.passwordHash
+  delete rest.passwordEnc
   delete rest.purchasePinHash
   delete rest.pinFailedAttempts
   delete rest.pinLockedUntil
@@ -83,10 +85,66 @@ export const insertStudent = internalMutation({
   },
 })
 
+/** Resets to the initial password (= login), so the stored encrypted copy no longer applies. */
 export const updatePasswordHash = internalMutation({
   args: { id: v.id('students'), passwordHash: v.string() },
   handler: async (ctx, { id, passwordHash }) => {
-    await ctx.db.patch(id, { passwordHash })
+    await ctx.db.patch(id, { passwordHash, passwordEnc: undefined, passwordChangedAt: undefined })
+  },
+})
+
+// ---- Internal helpers for the password actions in `studentsActions.js` ----
+
+/** The signed-in student's own credentials, for verifying the current password. */
+export const getMyPasswordContext = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const session = await resolveSession(ctx, token)
+    if (!session || session.role !== 'student') throw new ConvexError("Faqat o'quvchi parolini almashtira oladi")
+    const student = await ctx.db.get(session.userId)
+    if (!student || student.status !== 'active') throw new ConvexError("O'quvchi topilmadi")
+    return { studentId: student._id, login: student.login, passwordHash: student.passwordHash }
+  },
+})
+
+/** Saves a new password and signs the student out everywhere except `keepToken` (the device
+ * that changed it). Without `keepToken` every session ends. */
+export const savePassword = internalMutation({
+  args: {
+    studentId: v.id('students'),
+    passwordHash: v.string(),
+    passwordEnc: v.string(),
+    keepToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { studentId, passwordHash, passwordEnc, keepToken }) => {
+    await ctx.db.patch(studentId, { passwordHash, passwordEnc, passwordChangedAt: Date.now() })
+    const sessions = await ctx.db
+      .query('sessions')
+      .withIndex('by_user', (q) => q.eq('userId', studentId))
+      .collect()
+    let signedOut = 0
+    for (const session of sessions) {
+      if (session.token === keepToken) continue
+      await ctx.db.delete(session._id)
+      signedOut++
+    }
+    return { signedOut }
+  },
+})
+
+/** Center admins only (director / edu_admin), and only for a student of their own center. */
+export const getPasswordForAdmin = internalQuery({
+  args: { token: v.string(), studentId: v.id('students') },
+  handler: async (ctx, { token, studentId }) => {
+    await requireSuperAdmin(ctx, token)
+    await requireStudentOwner(ctx, token, studentId)
+    const student = await ctx.db.get(studentId)
+    return {
+      login: student.login,
+      passwordHash: student.passwordHash,
+      passwordEnc: student.passwordEnc ?? null,
+      passwordChangedAt: student.passwordChangedAt ?? null,
+    }
   },
 })
 

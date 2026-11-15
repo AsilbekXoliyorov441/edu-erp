@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Bell, BellOff, CheckCheck } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/ui/popover'
 import { useNotifications } from '@/entities/notification/model/store'
+import { useAuthStore } from '@/entities/session/model/store'
 import { formatRelativeUz } from '@/shared/lib/date'
 import { cn } from '@/shared/lib/utils'
 import { ROUTES } from '@/shared/config/constants'
@@ -47,12 +48,23 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const { items, unreadCount, loaded, markRead, markAllRead } = useNotifications()
   const seenIds = useRef(null)
+  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin)
+
+  /** Where a notification leads, or null. Admins land on the claims page for a new claim;
+   * everyone else on the town for deals and insurance. */
+  const targetOf = (item) => {
+    if (item.orderId) return ROUTES.ORDERS
+    if (item.type === 'lesson_quiz') return ROUTES.LESSON_QUIZ
+    if (item.type === 'insurance_claim' && isSuperAdmin) return ROUTES.INSURANCE
+    if (item.type.startsWith('town_') || item.type.startsWith('insurance_')) return ROUTES.TOWN
+    return null
+  }
 
   const openItem = (item) => {
     if (!item.read) markRead(item.id).catch(() => {})
     setOpen(false)
-    if (item.orderId) navigate(ROUTES.ORDERS)
-    else if (item.type === 'lesson_quiz') navigate(ROUTES.LESSON_QUIZ)
+    const to = targetOf(item)
+    if (to) navigate(to)
   }
 
   // Toast only notifications that appear after the first load.
@@ -79,10 +91,9 @@ export function NotificationBell() {
             </span>
           ),
           duration: 7000,
-          action:
-            item.orderId || item.type === 'lesson_quiz'
-              ? { label: item.type === 'lesson_quiz' ? 'Boshlash' : "Ko'rish", onClick: () => openItem(item) }
-              : undefined,
+          action: targetOf(item)
+            ? { label: item.type === 'lesson_quiz' ? 'Boshlash' : "Ko'rish", onClick: () => openItem(item) }
+            : undefined,
         })
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,6 +1,8 @@
 import { query, mutation, internalMutation } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
 import { getScope } from './lib/scoping'
+import { internal } from './_generated/api'
+import { notify, getOrderHandlerIds } from './lib/notify'
 import { PRESET_TESTS } from './lib/presetTests'
 import { DIRECTION_LABEL, groupDirection, lessonNumberOf, subjectOf, topicFitsLevel } from './lib/learningLevel'
 import {
@@ -15,7 +17,6 @@ import {
   upgradeOf,
   HOUSE_STYLES,
   SHOP_ITEMS,
-  TRAFFIC_FINE,
   kindOf,
   nextStage,
   pendingIncome,
@@ -23,13 +24,10 @@ import {
   PLAYER_COLORS,
   LEARN,
   PLOT_BY_ID,
-  STOP_BY_ID,
-  TAXI,
-  TAXI_STOPS,
   TOWN,
-  stopDistance,
-  taxiFare,
-  taxiParSeconds,
+  DEAL,
+  insurancePremium,
+  pendingCarIncome,
 } from '../src/shared/config/town'
 
 /** Every student and teacher of a center lives in the same town. */
@@ -58,9 +56,6 @@ function spend(me, amount) {
   return me.money - amount
 }
 
-/** Max time charged per heartbeat — a lost connection never burns more than this. */
-const MAX_TICK_GAP_MS = 20_000
-
 /** Mudaraba investment balance including the profit share earned since `bankAt`, at the
  * town's current hourly profit `rate` (see `townRate`). No interest — the rate is whatever
  * the town's businesses produce, and is zero when there are none. */
@@ -77,17 +72,76 @@ function townEconomy(players, plots) {
   return { incomePerHour, invested, rate: mudarabaRate(incomePerHour, invested) }
 }
 
-async function townRate(ctx, townKey) {
-  const players = await ctx.db
-    .query('townPlayers')
+/* Bandwidth note: every reactive query re-reads all the documents it touched whenever one
+ * of them changes, for every open screen. Player rows change constantly (money on every quiz
+ * answer), so shared, town-wide reads go through `townRoster` — a small public copy of each
+ * player that only changes when what others can see changes (name, colour, car, bank stake,
+ * learning score at the end of a session). Never read all `townPlayers` in a query. */
+
+function rosterFields(p) {
+  const fields = {
+    nickname: p.nickname,
+    color: p.color,
+    car: p.car,
+    carSalePrice: p.carSalePrice,
+    learnCorrect: p.learnCorrect ?? 0,
+    bankBalance: p.bankBalance ?? 0,
+  }
+  for (const k of Object.keys(fields)) if (fields[k] === undefined) delete fields[k]
+  return fields
+}
+
+/** Copy a player's public fields to `townRoster`, writing only when something changed. */
+async function syncRoster(ctx, playerId) {
+  const p = await ctx.db.get(playerId)
+  const row = await ctx.db
+    .query('townRoster')
+    .withIndex('by_player', (q) => q.eq('playerId', playerId))
+    .unique()
+  if (!p) {
+    if (row) await ctx.db.delete(row._id)
+    return
+  }
+  const fields = rosterFields(p)
+  if (!row) {
+    await ctx.db.insert('townRoster', { townKey: p.townKey, playerId, ...fields })
+    return
+  }
+  const keys = new Set([...Object.keys(fields), 'car', 'carSalePrice'])
+  const changed = [...keys].some((k) => JSON.stringify(row[k]) !== JSON.stringify(fields[k]))
+  if (changed) await ctx.db.patch(row._id, { car: undefined, carSalePrice: undefined, ...fields })
+}
+
+async function townRoster(ctx, townKey) {
+  return await ctx.db
+    .query('townRoster')
     .withIndex('by_town', (q) => q.eq('townKey', townKey))
     .collect()
-  const plots = await ctx.db
+}
+
+async function townPlotsOf(ctx, townKey) {
+  return await ctx.db
     .query('townPlots')
     .withIndex('by_town', (q) => q.eq('townKey', townKey))
     .collect()
-  return townEconomy(players, plots).rate
 }
+
+async function townRate(ctx, townKey) {
+  return townEconomy(await townRoster(ctx, townKey), await townPlotsOf(ctx, townKey)).rate
+}
+
+/** One-off / repair: rebuild every roster row from `townPlayers`. Run after deploying, or
+ * after editing players by hand: npx convex run town:syncAllRosters */
+export const syncAllRosters = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const players = await ctx.db.query('townPlayers').collect()
+    for (const p of players) await syncRoster(ctx, p._id)
+    const ids = new Set(players.map((p) => p._id))
+    for (const row of await ctx.db.query('townRoster').collect()) if (!ids.has(row.playerId)) await ctx.db.delete(row._id)
+    return { players: players.length }
+  },
+})
 
 async function getFund(ctx, townKey) {
   const row = await ctx.db
@@ -99,57 +153,29 @@ async function getFund(ctx, townKey) {
   return await ctx.db.get(id)
 }
 
-function fuelLeft(me, now) {
-  const left = me.driveMsLeft ?? 0
-  if (!me.driveTickAt) return left
-  return Math.max(0, left - Math.min(now - me.driveTickAt, MAX_TICK_GAP_MS))
-}
-
-async function activeTrip(ctx, playerId) {
-  for (const status of ['pickup', 'ride']) {
-    const t = await ctx.db
-      .query('townTrips')
-      .withIndex('by_player_status', (q) => q.eq('playerId', playerId).eq('status', status))
-      .first()
-    if (t) return t
-  }
-  return null
-}
-
-/** The whole town in one reactive query: residents, owned plots, and the caller. */
-export const getTown = query({
+/** The shared town map: residents (from the roster), owned plots and the town economy.
+ * Re-runs only when something everyone sees changes — not on anyone's money moving. */
+export const getTownMap = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const { townKey, userId, role } = await resolveTownUser(ctx, token)
-    const players = await ctx.db
-      .query('townPlayers')
-      .withIndex('by_town', (q) => q.eq('townKey', townKey))
-      .collect()
-    const plots = await ctx.db
-      .query('townPlots')
-      .withIndex('by_town', (q) => q.eq('townKey', townKey))
-      .collect()
-    const me = players.find((p) => p.userId === userId) ?? null
-    const trip = me ? await activeTrip(ctx, me._id) : null
-    const economy = townEconomy(players, plots)
+    const { townKey } = await resolveTownUser(ctx, token)
+    const roster = await townRoster(ctx, townKey)
+    const plots = await townPlotsOf(ctx, townKey)
+    const economy = townEconomy(roster, plots)
     const fundRow = await ctx.db
       .query('townFunds')
       .withIndex('by_town', (q) => q.eq('townKey', townKey))
       .first()
-    const sales = me
-      ? (
-          await ctx.db
-            .query('townSales')
-            .withIndex('by_seller', (q) => q.eq('sellerId', me._id))
-            .order('desc')
-            .take(5)
-        ).map((x) => ({ id: x._id, label: x.label, price: x.price, at: x.at, buyer: players.find((p) => p._id === x.buyerId)?.nickname ?? '?' }))
-      : []
-    const playerById = new Map(players.map((p) => [p._id, p]))
+    const byPlayer = new Map(roster.map((r) => [r.playerId, r]))
+    const stats = new Map()
+    for (const x of plots) {
+      const st = stats.get(x.ownerId) ?? { plots: 0, floors: 0 }
+      st.plots += 1
+      st.floors += x.floors
+      stats.set(x.ownerId, st)
+    }
 
     return {
-      /** Staff (teachers / admins) may fast-forward the day/night clock on their own screen. */
-      viewer: { staff: role === 'teacher' },
       economy: {
         incomePerHour: economy.incomePerHour,
         invested: economy.invested,
@@ -158,59 +184,21 @@ export const getTown = query({
         fundGiven: fundRow?.given ?? 0,
         fundDonors: fundRow?.donors ?? 0,
       },
-      me: me
-        ? {
-            id: me._id,
-            nickname: me.nickname,
-            color: me.color,
-            money: me.money,
-            car: me.car ?? null,
-            nextBonusAt: (me.lastBonusAt ?? 0) + TOWN.BONUS_COOLDOWN_MS,
-            taxiTrips: me.taxiTrips ?? 0,
-            learnCorrect: me.learnCorrect ?? 0,
-            learnEarned: me.learnEarned ?? 0,
-            buildCooldownUntil: me.buildCooldownUntil ?? 0,
-            fuelMs: fuelLeft(me, Date.now()),
-            bankBalance: bankNow(me, Date.now(), economy.rate),
-            loan: me.loan ?? 0,
-            loanLimit: loanLimit(me, plots.filter((x) => x.ownerId === me._id)),
-            zakatPaid: me.zakatPaid ?? 0,
-            mudarabaProfit: me.mudarabaProfit ?? 0,
-            helpAt: me.helpAt ?? 0,
-            scholarUntil: me.scholarUntil ?? 0,
-            driverUntil: me.driverUntil ?? 0,
-            builderKits: me.builderKits ?? 0,
-            sales,
-            taxiEarned: me.taxiEarned ?? 0,
-            trip: trip
-              ? {
-                  id: trip._id,
-                  status: trip.status,
-                  fromStop: trip.fromStop,
-                  toStop: trip.toStop,
-                  pickedAt: trip.pickedAt ?? null,
-                  fare: taxiFare(STOP_BY_ID[trip.fromStop], STOP_BY_ID[trip.toStop]),
-                  parSeconds: taxiParSeconds(STOP_BY_ID[trip.fromStop], STOP_BY_ID[trip.toStop]),
-                }
-              : null,
-          }
-        : null,
-      players: players.map((p) => ({
-        id: p._id,
-        nickname: p.nickname,
-        color: p.color,
-        car: p.car ?? null,
-        taxiTrips: p.taxiTrips ?? 0,
-        carSalePrice: p.carSalePrice ?? null,
-        learnCorrect: p.learnCorrect ?? 0,
-        plots: plots.filter((x) => x.ownerId === p._id).length,
-        floors: plots.filter((x) => x.ownerId === p._id).reduce((s, x) => s + x.floors, 0),
+      players: roster.map((r) => ({
+        id: r.playerId,
+        nickname: r.nickname,
+        color: r.color,
+        car: r.car ?? null,
+        carSalePrice: r.carSalePrice ?? null,
+        learnCorrect: r.learnCorrect ?? 0,
+        plots: stats.get(r.playerId)?.plots ?? 0,
+        floors: stats.get(r.playerId)?.floors ?? 0,
       })),
       plots: plots.map((x) => ({
         plotId: x.plotId,
         ownerId: x.ownerId,
-        ownerName: playerById.get(x.ownerId)?.nickname ?? '?',
-        ownerColor: playerById.get(x.ownerId)?.color ?? '#999',
+        ownerName: byPlayer.get(x.ownerId)?.nickname ?? '?',
+        ownerColor: byPlayer.get(x.ownerId)?.color ?? '#999',
         floors: x.floors,
         style: x.style,
         kind: kindOf(x),
@@ -218,7 +206,76 @@ export const getTown = query({
         builtAt: x.builtAt ?? null,
         lastCollectAt: x.lastCollectAt ?? null,
         salePrice: x.salePrice ?? null,
+        inDeal: !!x.dealId,
+        insuredValue: x.insuredValue ?? null,
       })),
+    }
+  },
+})
+
+/** The caller's own player: money, bank, cooldowns. Re-runs when the caller's own row
+ * changes (or the town economy does) — other players' activity doesn't touch it. */
+export const getTownMe = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const { townKey, userId, role } = await resolveTownUser(ctx, token)
+    const viewer = { staff: role === 'teacher' }
+    const me = await findMe(ctx, userId)
+    if (!me) return { viewer, me: null }
+
+    const now = Date.now()
+    const rate = await townRate(ctx, townKey)
+    const myPlots = (
+      await ctx.db
+        .query('townPlots')
+        .withIndex('by_owner', (q) => q.eq('ownerId', me._id))
+        .collect()
+    ).filter((x) => x.townKey === townKey)
+    const saleRows = await ctx.db
+      .query('townSales')
+      .withIndex('by_seller', (q) => q.eq('sellerId', me._id))
+      .order('desc')
+      .take(5)
+    const sales = []
+    for (const x of saleRows) {
+      const buyer = await ctx.db
+        .query('townRoster')
+        .withIndex('by_player', (q) => q.eq('playerId', x.buyerId))
+        .unique()
+      sales.push({ id: x._id, label: x.label, price: x.price, at: x.at, buyer: buyer?.nickname ?? '?' })
+    }
+
+    return {
+      viewer,
+      me: {
+        id: me._id,
+        nickname: me.nickname,
+        color: me.color,
+        money: me.money,
+        car: me.car ?? null,
+        carCollectAt: me.carCollectAt ?? null,
+        nextBonusAt: (me.lastBonusAt ?? 0) + TOWN.BONUS_COOLDOWN_MS,
+        learnCorrect: me.learnCorrect ?? 0,
+        learnEarned: me.learnEarned ?? 0,
+        buildCooldownUntil: me.buildCooldownUntil ?? 0,
+        bankBalance: bankNow(me, now, rate),
+        loan: me.loan ?? 0,
+        loanLimit: loanLimit(me, myPlots),
+        zakatPaid: me.zakatPaid ?? 0,
+        mudarabaProfit: me.mudarabaProfit ?? 0,
+        helpAt: me.helpAt ?? 0,
+        scholarUntil: me.scholarUntil ?? 0,
+        builderKits: me.builderKits ?? 0,
+        carInDeal: !!me.carDealId,
+        sales,
+        claims: (
+          await ctx.db
+            .query('townClaims')
+            .withIndex('by_player', (q) => q.eq('playerId', me._id))
+            .order('desc')
+            .take(5)
+        ).map((c) => ({ id: c._id, label: c.label, amount: c.amount, status: c.status, note: c.note ?? null, createdAt: c.createdAt })),
+      },
     }
   },
 })
@@ -240,7 +297,7 @@ export const join = mutation({
       .first()
     if (taken) throw new ConvexError('Bu username band — boshqasini tanlang')
 
-    return await ctx.db.insert('townPlayers', {
+    const id = await ctx.db.insert('townPlayers', {
       townKey,
       userId,
       nickname: name,
@@ -249,6 +306,8 @@ export const join = mutation({
       money: TOWN.START_MONEY,
       joinedAt: Date.now(),
     })
+    await syncRoster(ctx, id)
+    return id
   },
 })
 
@@ -315,11 +374,17 @@ export const buyCar = mutation({
     if (!myPlots.some((p) => p.townKey === townKey)) throw new ConvexError("Mashinani qo'yish uchun avval hovli sotib oling")
     const tradeIn = me.car ? Math.round((CAR_MODELS.find((c) => c.id === me.car.model)?.price ?? 0) / 2) : 0
     const cost = me.car?.model === model ? 500 : car.price - tradeIn // same model = just repaint
-    await ctx.db.patch(me._id, { money: spend(me, cost), car: { model, color } })
+    // a new model starts earning from now; a repaint keeps the running income
+    await ctx.db.patch(me._id, {
+      money: spend(me, cost),
+      car: { model, color },
+      ...(me.car?.model === model ? {} : { carCollectAt: Date.now() }),
+    })
+    await syncRoster(ctx, me._id)
   },
 })
 
-/** Daily allowance until there are real jobs (taxi) to earn money with. */
+/** Daily allowance. */
 export const claimBonus = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
@@ -327,6 +392,20 @@ export const claimBonus = mutation({
     const now = Date.now()
     if (now < (me.lastBonusAt ?? 0) + TOWN.BONUS_COOLDOWN_MS) throw new ConvexError('Bonusni hali olib bo\'lmaydi')
     await ctx.db.patch(me._id, { money: me.money + TOWN.DAILY_BONUS, lastBonusAt: now })
+  },
+})
+
+/** A car is an asset: it earns a share of its price every hour, collected by the owner. */
+export const collectCarIncome = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const { me } = await requireMe(ctx, token)
+    if (!me.car) throw new ConvexError("Mashinangiz yo'q")
+    const now = Date.now()
+    const amount = pendingCarIncome(me.car.model, me.carCollectAt, now)
+    if (amount < 100) throw new ConvexError("Hali yig'iladigan daromad yo'q")
+    await ctx.db.patch(me._id, { money: me.money + amount, carCollectAt: now })
+    return amount
   },
 })
 
@@ -340,101 +419,6 @@ export const adminSetMoney = internalMutation({
     if (matches.length === 0) throw new ConvexError(`@${nickname} topilmadi`)
     for (const p of matches) await ctx.db.patch(p._id, { money })
     return matches.length
-  },
-})
-
-/* ------------------------------------------------------------------ taxi ------------- */
-
-function randomStop(exclude) {
-  const pool = TAXI_STOPS.filter((s) => s.id !== exclude?.id)
-  // Public places are popular destinations: count them three times.
-  const weighted = pool.flatMap((s) => (s.public ? [s, s, s] : [s]))
-  return weighted[Math.floor(Math.random() * weighted.length)]
-}
-
-/** Driver: ask for a new passenger. Any unfinished ride is cancelled first. */
-export const taxiRequest = mutation({
-  args: { token: v.string(), nearX: v.optional(v.number()), nearZ: v.optional(v.number()) },
-  handler: async (ctx, { token, nearX, nearZ }) => {
-    const { me } = await requireMe(ctx, token)
-    if (!me.car) throw new ConvexError('Taksi uchun avval mashina sotib oling')
-    const old = await activeTrip(ctx, me._id)
-    if (old) await ctx.db.patch(old._id, { status: 'cancelled', doneAt: Date.now() })
-
-    // Pickup: somewhere not too far from the driver, so the first leg isn't a slog.
-    let from = randomStop()
-    if (nearX !== undefined && nearZ !== undefined) {
-      const near = [...TAXI_STOPS]
-        .map((s) => ({ s, d: Math.hypot(s.x - nearX, s.z - nearZ) }))
-        .filter((x) => x.d > 25)
-        .sort((a, b) => a.d - b.d)
-        .slice(0, 8)
-      if (near.length) from = near[Math.floor(Math.random() * near.length)].s
-    }
-    let to = randomStop(from)
-    for (let i = 0; i < 20 && stopDistance(from, to) < TAXI.MIN_TRIP_METERS; i += 1) to = randomStop(from)
-
-    return await ctx.db.insert('townTrips', {
-      playerId: me._id,
-      fromStop: from.id,
-      toStop: to.id,
-      status: 'pickup',
-      createdAt: Date.now(),
-    })
-  },
-})
-
-async function requireTrip(ctx, me, tripId, status) {
-  const trip = await ctx.db.get(tripId)
-  if (!trip || trip.playerId !== me._id || trip.status !== status) throw new ConvexError('Buyurtma topilmadi')
-  return trip
-}
-
-/** Driver reached the passenger. */
-export const taxiPickup = mutation({
-  args: { token: v.string(), tripId: v.id('townTrips') },
-  handler: async (ctx, { token, tripId }) => {
-    const { me } = await requireMe(ctx, token)
-    const trip = await requireTrip(ctx, me, tripId, 'pickup')
-    if (fuelLeft(me, Date.now()) <= 0) throw new ConvexError("Benzin tugagan — test ishlab yoqilg'i oling")
-    await ctx.db.patch(trip._id, { status: 'ride', pickedAt: Date.now() })
-  },
-})
-
-/** Driver delivered the passenger: paid by distance, +30% when fast. A delivery faster than a
- * car could physically drive is rejected. */
-export const taxiDropoff = mutation({
-  args: { token: v.string(), tripId: v.id('townTrips') },
-  handler: async (ctx, { token, tripId }) => {
-    const { me } = await requireMe(ctx, token)
-    const trip = await requireTrip(ctx, me, tripId, 'ride')
-    if (fuelLeft(me, Date.now()) <= 0) throw new ConvexError("Benzin tugagan — test ishlab yoqilg'i oling")
-    const from = STOP_BY_ID[trip.fromStop]
-    const to = STOP_BY_ID[trip.toStop]
-    const elapsedSec = (Date.now() - (trip.pickedAt ?? trip.createdAt)) / 1000
-    if (elapsedSec < stopDistance(from, to) / TAXI.MAX_AVG_SPEED) throw new ConvexError('Juda tez — bu mumkin emas')
-
-    const base = taxiFare(from, to)
-    const fast = elapsedSec <= taxiParSeconds(from, to)
-    const carBonus = CAR_MODELS.find((c) => c.id === me.car?.model)?.fareBonus ?? 0
-    const driverBuff = (me.driverUntil ?? 0) > Date.now() ? 0.25 : 0
-    const fare = Math.round(base * (1 + carBonus + driverBuff + (fast ? TAXI.FAST_BONUS : 0) + (trip.tip ? LEARN.PASSENGER_TIP : 0)))
-    await ctx.db.patch(trip._id, { status: 'done', doneAt: Date.now(), fare })
-    await ctx.db.patch(me._id, {
-      money: me.money + fare,
-      taxiTrips: (me.taxiTrips ?? 0) + 1,
-      taxiEarned: (me.taxiEarned ?? 0) + fare,
-    })
-    return { fare, fast, carBonus, tip: !!trip.tip, seconds: Math.round(elapsedSec) }
-  },
-})
-
-export const taxiCancel = mutation({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const { me } = await requireMe(ctx, token)
-    const trip = await activeTrip(ctx, me._id)
-    if (trip) await ctx.db.patch(trip._id, { status: 'cancelled', doneAt: Date.now() })
   },
 })
 
@@ -611,13 +595,13 @@ async function loadQuestion(ctx, ref) {
 }
 
 /** Library screen: the student's level and topics, with how much of each they've mastered. */
+/** The student's level and topics. Does not read the player's answers, so it does not
+ * re-run (re-reading every test question) after each answer — mastery comes from
+ * `learnedRefs` and is combined on the client. */
 export const learningProfile = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const { userId } = await resolveTownUser(ctx, token)
-    const me = await findMe(ctx, userId)
     const { meta, topics, currentKey } = await buildTopics(ctx, token)
-    const learned = me ? await learnedMap(ctx, me._id) : new Map()
     return {
       ...meta,
       directionLabel: DIRECTION_LABEL[meta.direction] ?? 'Umumiy',
@@ -630,11 +614,26 @@ export const learningProfile = query({
           lesson: t.lesson,
           source: t.source,
           total: t.refs.length,
-          ...topicMastery(t, learned),
+          refs: t.refs,
           current: t.key === currentKey,
         }))
         .sort((a, b) => (a.lesson ?? 999) - (b.lesson ?? 999) || a.title.localeCompare(b.title)),
     }
+  },
+})
+
+/** Question refs the caller has answered correctly at least once. */
+export const learnedRefs = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const { userId } = await resolveTownUser(ctx, token)
+    const me = await findMe(ctx, userId)
+    if (!me) return []
+    const rows = await ctx.db
+      .query('townLearned')
+      .withIndex('by_player', (q) => q.eq('playerId', me._id))
+      .collect()
+    return rows.filter((r) => r.correctCount > 0).map((r) => r.ref)
   },
 })
 
@@ -658,9 +657,9 @@ async function activeQuiz(ctx, playerId) {
 export const quizStart = mutation({
   args: {
     token: v.string(),
-    kind: v.union(v.literal('library'), v.literal('build'), v.literal('fuel'), v.literal('passenger'), v.literal('collect')),
+    kind: v.union(v.literal('library'), v.literal('build'), v.literal('collect')),
     plotId: v.optional(v.string()),
-    /** Library / fuel: practise one chosen topic instead of the mixed set. */
+    /** Library: practise one chosen topic instead of the mixed set. */
     topicKey: v.optional(v.string()),
   },
   handler: async (ctx, { token, kind, plotId, topicKey }) => {
@@ -674,18 +673,6 @@ export const quizStart = mutation({
 
     let count = LEARN.LIBRARY_QUESTIONS
     let need = 0
-    let tripId
-    if (kind === 'fuel') {
-      if (!me.car) throw new ConvexError('Avval mashina sotib oling')
-      if (fuelLeft(me, Date.now()) >= LEARN.FUEL_MAX_MS) throw new ConvexError("Bak to'la!")
-      count = LEARN.FUEL_QUESTIONS
-    }
-    if (kind === 'passenger') {
-      const trip = await activeTrip(ctx, me._id)
-      if (!trip || trip.status !== 'ride' || trip.tip !== undefined) throw new ConvexError("Yo'lovchi yo'q")
-      tripId = trip._id
-      count = 1
-    }
     if (kind === 'collect') {
       if (!plotId) throw new ConvexError('Hovli tanlanmagan')
       const row = await requireMyPlot(ctx, me, townKey, plotId)
@@ -707,9 +694,9 @@ export const quizStart = mutation({
       need = LEARN.examNeed(next)
     }
 
-    // Practice (library / fuel) favours new and missed questions; exams and passengers draw
-    // at random — still from the student's own level.
-    const practice = kind === 'library' || kind === 'fuel'
+    // Library practice favours new and missed questions; exams draw at random — still from
+    // the student's own level.
+    const practice = kind === 'library'
     const refs = pickRefs({
       topics,
       learned,
@@ -725,7 +712,6 @@ export const quizStart = mutation({
       playerId: me._id,
       kind,
       ...(plotId ? { plotId } : {}),
-      ...(tripId ? { tripId } : {}),
       refs,
       need,
       index: 0,
@@ -787,16 +773,8 @@ export const quizAnswer = mutation({
       .first()
 
     let reward = 0
-    let fuelAdded = 0
     const streak = correct ? quiz.streak + 1 : 0
-    // the fast-delivery clock starts once the passenger's question is done
-    if (quiz.kind === 'passenger' && quiz.tripId) await ctx.db.patch(quiz.tripId, { tip: correct, pickedAt: Date.now() })
     if (correct) {
-      if (quiz.kind === 'fuel') {
-        const now = Date.now()
-        const current = fuelLeft(me, now)
-        fuelAdded = Math.max(0, Math.min(LEARN.FUEL_MAX_MS, current + LEARN.FUEL_PER_CORRECT_MS) - current)
-      }
       if (quiz.kind === 'library') {
         const known = (learnedRow?.correctCount ?? 0) > 0
         reward = (known ? LEARN.REPEAT_REWARD : LEARN.NEW_REWARD) + Math.min((streak - 1) * LEARN.STREAK_BONUS, LEARN.MAX_STREAK_BONUS)
@@ -872,8 +850,7 @@ export const quizAnswer = mutation({
       index: nextIndex,
       correct: correctTotal,
       streak,
-      // for a fuel session `earned` counts ms of driving instead of money
-      earned: quiz.earned + (quiz.kind === 'fuel' ? fuelAdded : reward),
+      earned: quiz.earned + reward,
       status,
     })
     await ctx.db.patch(me._id, {
@@ -882,10 +859,9 @@ export const quizAnswer = mutation({
       learnEarned: (me.learnEarned ?? 0) + reward,
       ...(status === 'failed' ? { buildCooldownUntil: Date.now() + LEARN.FAIL_COOLDOWN_MS } : {}),
       ...(kitUsed ? { builderKits: (me.builderKits ?? 1) - 1 } : {}),
-      ...(fuelAdded
-        ? { driveMsLeft: fuelLeft(me, Date.now()) + fuelAdded, ...(me.driveTickAt ? { driveTickAt: Date.now() } : {}) }
-        : {}),
     })
+    // the public learning score moves once per session, not on every answer
+    if (status !== 'active') await syncRoster(ctx, me._id)
 
     return {
       correct,
@@ -898,8 +874,7 @@ export const quizAnswer = mutation({
       answered: nextIndex,
       total: quiz.refs.length,
       need: quiz.need,
-      earned: quiz.earned + (quiz.kind === 'fuel' ? fuelAdded : reward),
-      fuelAdded,
+      earned: quiz.earned + reward,
       collected,
       kind: quiz.kind,
     }
@@ -912,43 +887,7 @@ export const quizCancel = mutation({
     const { me } = await requireMe(ctx, token)
     const quiz = await activeQuiz(ctx, me._id)
     if (quiz) await ctx.db.patch(quiz._id, { status: 'cancelled' })
-  },
-})
-
-/* ------------------------------------------------------------------ fuel ------------- */
-
-/** Start the engine: fuel starts burning (charged by `driveTick` heartbeats). */
-export const driveStart = mutation({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const { me } = await requireMe(ctx, token)
-    if (!me.car) throw new ConvexError('Avval mashina sotib oling')
-    const now = Date.now()
-    const left = fuelLeft(me, now)
-    if (left <= 0) throw new ConvexError("Benzin yo'q — test ishlab yoqilg'i oling")
-    await ctx.db.patch(me._id, { driveMsLeft: left, driveTickAt: now })
-    return left
-  },
-})
-
-/** Heartbeat while driving — charges the time since the last one. Returns fuel left. */
-export const driveTick = mutation({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const { me } = await requireMe(ctx, token)
-    const now = Date.now()
-    const left = fuelLeft(me, now)
-    await ctx.db.patch(me._id, left > 0 && me.driveTickAt ? { driveMsLeft: left, driveTickAt: now } : { driveMsLeft: left, driveTickAt: undefined })
-    return left
-  },
-})
-
-/** Engine off (exit, or paused for a question). */
-export const driveStop = mutation({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const { me } = await requireMe(ctx, token)
-    await ctx.db.patch(me._id, { driveMsLeft: fuelLeft(me, Date.now()), driveTickAt: undefined })
+    await syncRoster(ctx, me._id)
   },
 })
 
@@ -1007,6 +946,7 @@ export const bankDeposit = mutation({
     if (!(a > 0)) throw new ConvexError("Summa noto'g'ri")
     const bank = await settleBank(ctx, me, townKey, Date.now())
     await ctx.db.patch(me._id, { ...bank, money: spend(me, a), bankBalance: bank.bankBalance + a })
+    await syncRoster(ctx, me._id)
   },
 })
 
@@ -1018,6 +958,7 @@ export const bankWithdraw = mutation({
     const a = Math.min(Math.floor(amount), bank.bankBalance)
     if (!(a > 0)) throw new ConvexError("Bankda pul yo'q")
     await ctx.db.patch(me._id, { ...bank, money: me.money + a, bankBalance: bank.bankBalance - a })
+    await syncRoster(ctx, me._id)
   },
 })
 
@@ -1069,6 +1010,7 @@ export const giveCharity = mutation({
     const fund = await getFund(ctx, townKey)
     await ctx.db.patch(fund._id, { balance: fund.balance + give, donors: fund.donors + 1 })
     await ctx.db.patch(me._id, { ...bank, money: me.money - give, zakatPaid: (me.zakatPaid ?? 0) + give })
+    await syncRoster(ctx, me._id)
     return give
   },
 })
@@ -1105,23 +1047,11 @@ export const buyItem = mutation({
     const now = Date.now()
     const patch = { money: spend(me, it.price) }
     if (it.buff === 'scholar') patch.scholarUntil = Math.max(now, me.scholarUntil ?? 0) + it.minutes * 60_000
-    if (it.buff === 'driver') patch.driverUntil = Math.max(now, me.driverUntil ?? 0) + it.minutes * 60_000
     if (it.buff === 'builder') {
       if ((me.builderKits ?? 0) >= 3) throw new ConvexError("Ko'pi bilan 3 ta to'plam saqlash mumkin")
       patch.builderKits = (me.builderKits ?? 0) + 1
     }
     await ctx.db.patch(me._id, patch)
-  },
-})
-
-/** Ran a red light while driving. */
-export const trafficFine = mutation({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const { me } = await requireMe(ctx, token)
-    const fine = Math.min(me.money, TRAFFIC_FINE)
-    await ctx.db.patch(me._id, { money: me.money - fine })
-    return fine
   },
 })
 
@@ -1139,9 +1069,43 @@ export const listPlot = mutation({
   handler: async (ctx, { token, plotId, price }) => {
     const { me, townKey } = await requireMe(ctx, token)
     const row = await requireMyPlot(ctx, me, townKey, plotId)
+    if (row.dealId) throw new ConvexError("Bu hovli bo'yicha bitim ketyapti — avval uni bekor qiling")
     await ctx.db.patch(row._id, { salePrice: price === null ? undefined : checkPrice(price) })
   },
 })
+
+/* Buying from another player is not instant. Like a real purchase, the deal goes through
+ * an hour of paperwork (documents → notary → bank → cadastre): the buyer's money is held by
+ * the bank, the seller sees "your house is being sold" everywhere and can stop it ("this
+ * wasn't me") — so a stranger in someone's account can't quietly sell their things. */
+
+async function startDeal(ctx, { townKey, what, plotId, seller, buyer, price, label }) {
+  const now = Date.now()
+  const closesAt = now + DEAL.MS
+  const dealId = await ctx.db.insert('townDeals', {
+    townKey,
+    what,
+    ...(plotId ? { plotId } : {}),
+    sellerId: seller._id,
+    buyerId: buyer._id,
+    price,
+    label,
+    status: 'pending',
+    createdAt: now,
+    closesAt,
+  })
+  await ctx.scheduler.runAt(closesAt, internal.town.finalizeDeal, { dealId })
+  await notify(ctx, [seller.userId], {
+    type: 'town_deal_started',
+    title: `${label} sotilmoqda`,
+    body: `@${buyer.nickname} ${formatPrice(price)} ga sotib olyapti. Bitim 1 soatdan keyin yakunlanadi. Buni siz qilmagan bo'lsangiz, shaharchada "Bekor qilish" ni bosing.`,
+  })
+  return dealId
+}
+
+function formatPrice(n) {
+  return `$${Math.round(n).toLocaleString('en-US')}`
+}
 
 export const buyListedPlot = mutation({
   args: { token: v.string(), plotId: v.string(), price: v.number() },
@@ -1153,29 +1117,25 @@ export const buyListedPlot = mutation({
       .first()
     if (!row || row.salePrice === undefined) throw new ConvexError('Bu hovli sotuvda emas')
     if (row.ownerId === me._id) throw new ConvexError("O'zingizning hovlingiz")
+    if (row.dealId) throw new ConvexError('Bu hovlini boshqa xaridor sotib olyapti')
     // the price the buyer saw must still be the price — no surprise hikes
     if (row.salePrice !== price) throw new ConvexError("Narx o'zgardi — qaytadan ko'ring")
     const seller = await ctx.db.get(row.ownerId)
+    if (!seller) throw new ConvexError('Sotuvchi topilmadi')
     await ctx.db.patch(me._id, { money: spend(me, row.salePrice) })
-    if (seller) await ctx.db.patch(seller._id, { money: seller.money + row.salePrice })
-    await ctx.db.patch(row._id, {
-      ownerId: me._id,
-      salePrice: undefined,
-      boughtAt: Date.now(),
-      lastCollectAt: row.floors > 0 ? Date.now() : undefined,
-    })
     const plot = PLOT_BY_ID[plotId]
     const k = BUILDING_KINDS[kindOf(row)]
-    await ctx.db.insert('townSales', {
+    const dealId = await startDeal(ctx, {
       townKey,
-      sellerId: row.ownerId,
-      buyerId: me._id,
       what: 'plot',
       plotId,
-      label: `Hovli №${plot?.number}${row.floors ? ` (${k.name}, ${row.floors} qavat)` : ''}`,
+      seller,
+      buyer: me,
       price: row.salePrice,
-      at: Date.now(),
+      label: `Hovli №${plot?.number}${row.floors ? ` (${k.name}, ${row.floors} qavat)` : ''}`,
     })
+    await ctx.db.patch(row._id, { dealId })
+    return dealId
   },
 })
 
@@ -1185,13 +1145,14 @@ export const listCar = mutation({
   handler: async (ctx, { token, price }) => {
     const { me } = await requireMe(ctx, token)
     if (!me.car) throw new ConvexError("Sizda mashina yo'q")
-    if (me.driveTickAt) throw new ConvexError('Avval mashinadan tushing')
+    if (me.carDealId) throw new ConvexError("Mashina bo'yicha bitim ketyapti — avval uni bekor qiling")
     await ctx.db.patch(me._id, { carSalePrice: price === null ? undefined : checkPrice(price) })
+    await syncRoster(ctx, me._id)
   },
 })
 
-/** Buy another player's listed car. Your current car (if any) goes to the dealer for half
- * its showroom price. */
+/** Buy another player's listed car — starts an hour-long deal (see `startDeal`). Your
+ * current car (if any) goes to the dealer for half its showroom price when the deal closes. */
 export const buyListedCar = mutation({
   args: { token: v.string(), sellerId: v.id('townPlayers'), price: v.number() },
   handler: async (ctx, { token, sellerId, price }) => {
@@ -1199,26 +1160,336 @@ export const buyListedCar = mutation({
     const seller = await ctx.db.get(sellerId)
     if (!seller || seller.townKey !== townKey || !seller.car || seller.carSalePrice === undefined) throw new ConvexError('Bu mashina sotuvda emas')
     if (seller._id === me._id) throw new ConvexError("O'zingizning mashinangiz")
+    if (seller.carDealId) throw new ConvexError('Bu mashinani boshqa xaridor sotib olyapti')
     if (seller.carSalePrice !== price) throw new ConvexError("Narx o'zgardi — qaytadan ko'ring")
-    if (seller.driveTickAt) throw new ConvexError("Egasi hozir mashinada — birozdan keyin urinib ko'ring")
     const myPlots = await ctx.db
       .query('townPlots')
       .withIndex('by_owner', (q) => q.eq('ownerId', me._id))
-      .collect()
-    if (!myPlots.length) throw new ConvexError("Mashina qo'yish uchun avval hovli sotib oling")
-    const tradeIn = me.car ? Math.round((CAR_MODELS.find((c) => c.id === me.car.model)?.price ?? 0) / 2) : 0
-    const total = seller.carSalePrice - tradeIn
-    if (me.money < total) throw new ConvexError('Pulingiz yetmaydi')
-    await ctx.db.patch(me._id, { money: me.money - total, car: seller.car, carSalePrice: undefined })
-    await ctx.db.patch(seller._id, { money: seller.money + seller.carSalePrice, car: undefined, carSalePrice: undefined })
-    await ctx.db.insert('townSales', {
+      .first()
+    if (!myPlots) throw new ConvexError("Mashina qo'yish uchun avval hovli sotib oling")
+    await ctx.db.patch(me._id, { money: spend(me, seller.carSalePrice) })
+    const dealId = await startDeal(ctx, {
       townKey,
-      sellerId: seller._id,
-      buyerId: me._id,
       what: 'car',
-      label: CAR_MODELS.find((c) => c.id === seller.car.model)?.name ?? 'Mashina',
+      seller,
+      buyer: me,
       price: seller.carSalePrice,
-      at: Date.now(),
+      label: CAR_MODELS.find((c) => c.id === seller.car.model)?.name ?? 'Mashina',
     })
+    await ctx.db.patch(seller._id, { carDealId: dealId })
+    return dealId
+  },
+})
+
+/** Release whatever a deal locked (plot / car) and give the buyer's held money back. */
+async function unwindDeal(ctx, deal, reason) {
+  const buyer = await ctx.db.get(deal.buyerId)
+  if (buyer) await ctx.db.patch(buyer._id, { money: buyer.money + deal.price })
+  await releaseDealLock(ctx, deal)
+  await ctx.db.patch(deal._id, { status: 'cancelled', closedAt: Date.now(), cancelReason: reason })
+  return buyer
+}
+
+async function releaseDealLock(ctx, deal) {
+  if (deal.what === 'plot') {
+    const row = await ctx.db
+      .query('townPlots')
+      .withIndex('by_town_plot', (q) => q.eq('townKey', deal.townKey).eq('plotId', deal.plotId))
+      .first()
+    if (row?.dealId === deal._id) await ctx.db.patch(row._id, { dealId: undefined })
+  } else {
+    const seller = await ctx.db.get(deal.sellerId)
+    if (seller?.carDealId === deal._id) await ctx.db.patch(seller._id, { carDealId: undefined })
+  }
+}
+
+/** Seller: "this wasn't me" — stop a deal before it closes. The buyer gets the money back. */
+export const cancelDeal = mutation({
+  args: { token: v.string(), dealId: v.id('townDeals') },
+  handler: async (ctx, { token, dealId }) => {
+    const { me } = await requireMe(ctx, token)
+    const deal = await ctx.db.get(dealId)
+    if (!deal || deal.sellerId !== me._id) throw new ConvexError('Bitim topilmadi')
+    if (deal.status !== 'pending') throw new ConvexError('Bitim allaqachon yakunlangan')
+    // the seller also takes the item off the market, so the same thing can't restart at once
+    if (deal.what === 'plot') {
+      const row = await ctx.db
+        .query('townPlots')
+        .withIndex('by_town_plot', (q) => q.eq('townKey', deal.townKey).eq('plotId', deal.plotId))
+        .first()
+      if (row) await ctx.db.patch(row._id, { salePrice: undefined })
+    } else {
+      await ctx.db.patch(me._id, { carSalePrice: undefined })
+      await syncRoster(ctx, me._id)
+    }
+    const buyer = await unwindDeal(ctx, deal, 'seller')
+    if (buyer) {
+      await notify(ctx, [buyer.userId], {
+        type: 'town_deal_cancelled',
+        title: 'Bitim bekor qilindi',
+        body: `Egasi ${deal.label} sotuvini to'xtatdi. ${formatPrice(deal.price)} hisobingizga qaytarildi.`,
+      })
+    }
+  },
+})
+
+/** Scheduled at `closesAt`: hand the property over, pay the seller, and open an insurance
+ * claim if an insured plot went for less than its insured value. */
+export const finalizeDeal = internalMutation({
+  args: { dealId: v.id('townDeals') },
+  handler: async (ctx, { dealId }) => {
+    const deal = await ctx.db.get(dealId)
+    if (!deal || deal.status !== 'pending') return
+    const now = Date.now()
+    const seller = await ctx.db.get(deal.sellerId)
+    const buyer = await ctx.db.get(deal.buyerId)
+    if (!seller || !buyer) {
+      await unwindDeal(ctx, deal, 'missing')
+      return
+    }
+
+    if (deal.what === 'plot') {
+      const row = await ctx.db
+        .query('townPlots')
+        .withIndex('by_town_plot', (q) => q.eq('townKey', deal.townKey).eq('plotId', deal.plotId))
+        .first()
+      if (!row || row.ownerId !== seller._id || row.dealId !== deal._id) {
+        await unwindDeal(ctx, deal, 'changed')
+        return
+      }
+      await ctx.db.patch(row._id, {
+        ownerId: buyer._id,
+        salePrice: undefined,
+        dealId: undefined,
+        // the policy belonged to the seller; the new owner starts uninsured
+        insuredValue: undefined,
+        insuredAt: undefined,
+        boughtAt: now,
+        lastCollectAt: row.floors > 0 ? now : undefined,
+      })
+      if (row.insuredValue && deal.price < row.insuredValue) {
+        const amount = row.insuredValue - deal.price
+        await ctx.db.insert('townClaims', {
+          townKey: deal.townKey,
+          playerId: seller._id,
+          dealId: deal._id,
+          plotId: deal.plotId,
+          label: deal.label,
+          insuredValue: row.insuredValue,
+          salePrice: deal.price,
+          amount,
+          buyerName: buyer.nickname,
+          status: 'pending',
+          createdAt: now,
+        })
+        await notify(ctx, [seller.userId], {
+          type: 'insurance_claim',
+          title: "Sug'urta da'vosi yuborildi",
+          body: `${deal.label} sug'urta qiymatidan ${formatPrice(amount)} arzonga sotildi. Da'vo admin ko'rib chiqishiga yuborildi.`,
+        })
+        if (deal.townKey !== 'global') {
+          await notify(ctx, await getOrderHandlerIds(ctx, null, deal.townKey), {
+            type: 'insurance_claim',
+            title: "Yangi sug'urta da'vosi",
+            body: `@${seller.nickname}: ${deal.label} — ${formatPrice(amount)} zarar. Shaharcha → Sug'urta bo'limida ko'rib chiqing.`,
+          })
+        }
+      }
+    } else {
+      if (!seller.car || seller.carDealId !== deal._id) {
+        await unwindDeal(ctx, deal, 'changed')
+        return
+      }
+      const tradeIn = buyer.car ? Math.round((CAR_MODELS.find((c) => c.id === buyer.car.model)?.price ?? 0) / 2) : 0
+      await ctx.db.patch(buyer._id, { money: buyer.money + tradeIn, car: seller.car, carSalePrice: undefined, carCollectAt: now })
+      await ctx.db.patch(seller._id, { car: undefined, carSalePrice: undefined, carDealId: undefined })
+    }
+
+    const sellerNow = await ctx.db.get(seller._id)
+    await ctx.db.patch(seller._id, { money: sellerNow.money + deal.price })
+    await ctx.db.patch(deal._id, { status: 'done', closedAt: now })
+    await ctx.db.insert('townSales', {
+      townKey: deal.townKey,
+      sellerId: seller._id,
+      buyerId: buyer._id,
+      what: deal.what,
+      ...(deal.plotId ? { plotId: deal.plotId } : {}),
+      label: deal.label,
+      price: deal.price,
+      at: now,
+    })
+    await syncRoster(ctx, seller._id)
+    await syncRoster(ctx, buyer._id)
+    await notify(ctx, [seller.userId], {
+      type: 'town_deal_done',
+      title: 'Bitim yakunlandi',
+      body: `${deal.label} @${buyer.nickname} ga ${formatPrice(deal.price)} ga sotildi. Pul hisobingizda.`,
+    })
+    await notify(ctx, [buyer.userId], {
+      type: 'town_deal_done',
+      title: 'Xarid rasmiylashtirildi',
+      body: `${deal.label} endi sizniki!`,
+    })
+  },
+})
+
+/** The caller's open deals (as seller or buyer) — small, for the "being sold" banner that
+ * shows on every page. */
+export const myDeals = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const scope = await getScope(ctx, token)
+    if (scope.platformAdmin) return []
+    const me = await findMe(ctx, scope.session.userId)
+    if (!me) return []
+    const selling = await ctx.db
+      .query('townDeals')
+      .withIndex('by_seller_status', (q) => q.eq('sellerId', me._id).eq('status', 'pending'))
+      .collect()
+    const buying = await ctx.db
+      .query('townDeals')
+      .withIndex('by_buyer_status', (q) => q.eq('buyerId', me._id).eq('status', 'pending'))
+      .collect()
+    const nameOf = async (playerId) =>
+      (
+        await ctx.db
+          .query('townRoster')
+          .withIndex('by_player', (q) => q.eq('playerId', playerId))
+          .unique()
+      )?.nickname ?? '?'
+    const out = []
+    for (const d of selling) out.push({ id: d._id, role: 'seller', label: d.label, price: d.price, createdAt: d.createdAt, closesAt: d.closesAt, other: await nameOf(d.buyerId) })
+    for (const d of buying) out.push({ id: d._id, role: 'buyer', label: d.label, price: d.price, createdAt: d.createdAt, closesAt: d.closesAt, other: await nameOf(d.sellerId) })
+    return out
+  },
+})
+
+/* ------------------------------------------------------------------ insurance -------- */
+
+/** Insure an owned plot at its current estimated value (or top up cover after building).
+ * One-time premium of 5% goes to the town's insurance company. */
+export const insurePlot = mutation({
+  args: { token: v.string(), plotId: v.string() },
+  handler: async (ctx, { token, plotId }) => {
+    const { me, townKey } = await requireMe(ctx, token)
+    const row = await requireMyPlot(ctx, me, townKey, plotId)
+    if (row.dealId) throw new ConvexError('Bitim jarayonidagi hovlini sug\'urtalab bo\'lmaydi')
+    const value = estimateValue(PLOT_BY_ID[plotId], row)
+    const premium = insurancePremium(value, row.insuredValue ?? 0)
+    if (premium <= 0) throw new ConvexError("Hovli allaqachon to'liq qiymatiga sug'urtalangan")
+    await ctx.db.patch(me._id, { money: spend(me, premium) })
+    await ctx.db.patch(row._id, { insuredValue: value, insuredAt: Date.now() })
+    const fund = await getFund(ctx, townKey)
+    await ctx.db.patch(fund._id, {
+      insurancePool: (fund.insurancePool ?? 0) + premium,
+      insurancePremiums: (fund.insurancePremiums ?? 0) + premium,
+    })
+    return { value, premium }
+  },
+})
+
+async function requireTownAdmin(ctx, token) {
+  const scope = await getScope(ctx, token)
+  if (scope.platformAdmin || scope.session.role !== 'teacher' || !scope.all) {
+    throw new ConvexError("Faqat markaz administratori uchun")
+  }
+  return { scope, townKey: String(scope.centerId) }
+}
+
+/** Admin: insurance claims of the center's town, plus the insurance company's books. */
+export const listClaims = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const { townKey } = await requireTownAdmin(ctx, token)
+    const claims = []
+    for (const status of ['pending', 'approved', 'rejected']) {
+      const rows = await ctx.db
+        .query('townClaims')
+        .withIndex('by_town_status', (q) => q.eq('townKey', townKey).eq('status', status))
+        .order('desc')
+        .take(status === 'pending' ? 200 : 50)
+      claims.push(...rows)
+    }
+    const out = []
+    for (const c of claims) {
+      const player = await ctx.db.get(c.playerId)
+      const decider = c.decidedBy ? await ctx.db.get(c.decidedBy) : null
+      let ownerName = null
+      if (player) {
+        const user = await ctx.db.get(player.userId)
+        ownerName = user?.fullName ?? null
+      }
+      out.push({
+        ...c,
+        nickname: player?.nickname ?? '?',
+        ownerName,
+        decidedByName: decider?.fullName ?? null,
+      })
+    }
+    const fund = await ctx.db
+      .query('townFunds')
+      .withIndex('by_town', (q) => q.eq('townKey', townKey))
+      .first()
+    return {
+      claims: out.sort((a, b) => b.createdAt - a.createdAt),
+      company: {
+        pool: fund?.insurancePool ?? 0,
+        premiums: fund?.insurancePremiums ?? 0,
+        paid: fund?.insurancePaid ?? 0,
+        subsidy: fund?.insuranceSubsidy ?? 0,
+      },
+    }
+  },
+})
+
+/** Admin: approve (the insurance company pays the loss) or reject a claim. */
+export const decideClaim = mutation({
+  args: { token: v.string(), claimId: v.id('townClaims'), approve: v.boolean(), note: v.optional(v.string()) },
+  handler: async (ctx, { token, claimId, approve, note }) => {
+    const { scope, townKey } = await requireTownAdmin(ctx, token)
+    const claim = await ctx.db.get(claimId)
+    if (!claim || claim.townKey !== townKey) throw new ConvexError("Da'vo topilmadi")
+    if (claim.status !== 'pending') throw new ConvexError("Da'vo allaqachon ko'rib chiqilgan")
+    const cleanNote = note?.trim().slice(0, 300) || undefined
+    const player = await ctx.db.get(claim.playerId)
+
+    if (approve) {
+      const fund = await getFund(ctx, townKey)
+      const pool = fund.insurancePool ?? 0
+      const fromPool = Math.min(pool, claim.amount)
+      await ctx.db.patch(fund._id, {
+        insurancePool: pool - fromPool,
+        insurancePaid: (fund.insurancePaid ?? 0) + claim.amount,
+        // when the premiums don't cover it, the town tops the company up
+        insuranceSubsidy: (fund.insuranceSubsidy ?? 0) + (claim.amount - fromPool),
+      })
+      if (player) await ctx.db.patch(player._id, { money: player.money + claim.amount })
+    }
+    await ctx.db.patch(claim._id, {
+      status: approve ? 'approved' : 'rejected',
+      decidedAt: Date.now(),
+      decidedBy: scope.session.userId,
+      note: cleanNote,
+    })
+    if (player) {
+      await notify(ctx, [player.userId], approve
+        ? { type: 'insurance_paid', title: "Sug'urta to'landi", body: `${claim.label} bo'yicha ${formatPrice(claim.amount)} hisobingizga o'tkazildi.` }
+        : { type: 'insurance_rejected', title: "Sug'urta da'vosi rad etildi", body: `${claim.label}${cleanNote ? `: ${cleanNote}` : ''}` })
+    }
+  },
+})
+
+/** Admin sidebar badge: just the number of open claims (reads nothing else, so it stays
+ * cheap while subscribed on every page). */
+export const pendingClaimCount = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const scope = await getScope(ctx, token)
+    if (scope.platformAdmin || scope.session.role !== 'teacher' || !scope.all) return 0
+    const rows = await ctx.db
+      .query('townClaims')
+      .withIndex('by_town_status', (q) => q.eq('townKey', String(scope.centerId)).eq('status', 'pending'))
+      .collect()
+    return rows.length
   },
 })

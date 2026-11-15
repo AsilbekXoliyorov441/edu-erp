@@ -6,7 +6,7 @@
  *
  * TARGET — Vercel'dagi VITE_CONVEX_URL bilan bir xil bo'lishi kerak.
  */
-const TARGET = 'https://strong-dotterel-98.convex.cloud'
+const TARGET = 'https://little-cod-680.eu-west-1.convex.cloud'
 
 export default {
   async fetch(request) {

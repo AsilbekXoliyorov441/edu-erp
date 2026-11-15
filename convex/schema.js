@@ -65,6 +65,10 @@ export default defineSchema({
     pinFailedAttempts: v.optional(v.number()),
     /** ms timestamp; PIN entry is blocked until then after too many wrong attempts. */
     pinLockedUntil: v.optional(v.number()),
+    /** The password the student chose, AES-GCM encrypted with `PASSWORD_VAULT_KEY` so only a
+     * center admin (director / edu_admin) can reveal it. Absent = still the initial password. */
+    passwordEnc: v.optional(v.string()),
+    passwordChangedAt: v.optional(v.number()),
   })
     .index('by_login', ['login'])
     .index('by_group', ['groupId']),
@@ -282,12 +286,33 @@ export default defineSchema({
     zakatPaid: v.optional(v.number()),
     mudarabaProfit: v.optional(v.number()),
     helpAt: v.optional(v.number()),
+    /** Car income is counted from here (cars earn per hour instead of being driven). */
+    carCollectAt: v.optional(v.number()),
+    /** Set while someone is buying this player's car (see `townDeals`). */
+    carDealId: v.optional(v.id('townDeals')),
   })
     .index('by_town', ['townKey'])
     .index('by_user', ['userId'])
     .index('by_town_nickname', ['townKey', 'nicknameLower']),
 
   /** An owned plot. Plots nobody bought have no row; positions/prices live in `TOWN_PLOTS`. */
+  /** Public copy of each town player — what other players see (name, colour, car, bank
+   * stake, learning score). Shared queries read this instead of `townPlayers`, whose rows
+   * change on every money move, so one player's activity doesn't re-run everyone's map.
+   * Kept in sync by `syncRoster` in `town.js`. */
+  townRoster: defineTable({
+    townKey: v.string(),
+    playerId: v.id('townPlayers'),
+    nickname: v.string(),
+    color: v.string(),
+    car: v.optional(v.object({ model: v.string(), color: v.string() })),
+    carSalePrice: v.optional(v.number()),
+    learnCorrect: v.number(),
+    bankBalance: v.number(),
+  })
+    .index('by_town', ['townKey'])
+    .index('by_player', ['playerId']),
+
   townPlots: defineTable({
     townKey: v.string(),
     plotId: v.string(),
@@ -301,6 +326,11 @@ export default defineSchema({
     lastCollectAt: v.optional(v.number()),
     /** Listed on the market at this price (set by the owner). */
     salePrice: v.optional(v.number()),
+    /** Set while a purchase of this plot is going through (see `townDeals`). */
+    dealId: v.optional(v.id('townDeals')),
+    /** Property insurance: the value covered, and when the policy was bought. */
+    insuredValue: v.optional(v.number()),
+    insuredAt: v.optional(v.number()),
     boughtAt: v.number(),
     builtAt: v.optional(v.number()),
   })
@@ -343,7 +373,55 @@ export default defineSchema({
     balance: v.number(),
     given: v.number(),
     donors: v.number(),
+    /** The insurance company: premiums collected, claims paid, and what the town had to
+     * add when the pool ran short. */
+    insurancePool: v.optional(v.number()),
+    insurancePremiums: v.optional(v.number()),
+    insurancePaid: v.optional(v.number()),
+    insuranceSubsidy: v.optional(v.number()),
   }).index('by_town', ['townKey']),
+
+  /** A purchase from another player that is still going through paperwork. The buyer's money
+   * is held from the start; after `closesAt` the property changes hands, unless the seller
+   * stopped it first. */
+  townDeals: defineTable({
+    townKey: v.string(),
+    what: v.union(v.literal('plot'), v.literal('car')),
+    plotId: v.optional(v.string()),
+    sellerId: v.id('townPlayers'),
+    buyerId: v.id('townPlayers'),
+    price: v.number(),
+    label: v.string(),
+    status: v.union(v.literal('pending'), v.literal('done'), v.literal('cancelled')),
+    createdAt: v.number(),
+    closesAt: v.number(),
+    closedAt: v.optional(v.number()),
+    cancelReason: v.optional(v.string()),
+  })
+    .index('by_status', ['status'])
+    .index('by_seller_status', ['sellerId', 'status'])
+    .index('by_buyer_status', ['buyerId', 'status']),
+
+  /** An insurance claim: an insured plot was sold below its insured value. A center admin
+   * approves (the insurance company pays the difference) or rejects it. */
+  townClaims: defineTable({
+    townKey: v.string(),
+    playerId: v.id('townPlayers'),
+    dealId: v.id('townDeals'),
+    plotId: v.string(),
+    label: v.string(),
+    insuredValue: v.number(),
+    salePrice: v.number(),
+    amount: v.number(),
+    buyerName: v.string(),
+    status: v.union(v.literal('pending'), v.literal('approved'), v.literal('rejected')),
+    createdAt: v.number(),
+    decidedAt: v.optional(v.number()),
+    decidedBy: v.optional(v.id('teachers')),
+    note: v.optional(v.string()),
+  })
+    .index('by_town_status', ['townKey', 'status'])
+    .index('by_player', ['playerId']),
 
   /** Player-to-player sales on the town market. */
   townSales: defineTable({
@@ -415,6 +493,14 @@ export default defineSchema({
       v.literal('order_rejected'),
       v.literal('pin_reset'),
       v.literal('lesson_quiz'),
+      v.literal('town_warning'),
+      v.literal('town_restored'),
+      v.literal('town_deal_started'),
+      v.literal('town_deal_done'),
+      v.literal('town_deal_cancelled'),
+      v.literal('insurance_claim'),
+      v.literal('insurance_paid'),
+      v.literal('insurance_rejected'),
     ),
     title: v.string(),
     body: v.string(),
@@ -442,7 +528,9 @@ export default defineSchema({
     role: v.union(v.literal('teacher'), v.literal('student')),
     userId: v.union(v.id('teachers'), v.id('students')),
     createdAt: v.number(),
-  }).index('by_token', ['token']),
+  })
+    .index('by_token', ['token'])
+    .index('by_user', ['userId']),
 
   /** A reusable quiz topic ("mavzu") — created once by a teacher and attached to any number
    * of groups via `testAssignments`, so the same 10-20 questions don't need to be recreated

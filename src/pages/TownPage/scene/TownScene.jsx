@@ -9,10 +9,8 @@ import { EmptyLotGrounds, LotSignPosts, NearSigns, Plot } from '@/pages/TownPage
 import { PublicPlaces } from '@/pages/TownPage/scene/PublicPlaces'
 import { NewUzbekistan } from '@/pages/TownPage/scene/NewUzbekistan'
 import { MetroLine } from '@/pages/TownPage/scene/MetroLine'
-import { DriveController } from '@/pages/TownPage/drive/DriveController'
 import { WalkController } from '@/pages/TownPage/drive/WalkController'
 import { walkBuildings } from '@/pages/TownPage/drive/walkState'
-import { TaxiMarkers } from '@/pages/TownPage/drive/TaxiMarkers'
 import { useDriveHud } from '@/pages/TownPage/drive/driveState'
 import { FADE_MS, applyNight, isNightNow, nightState } from '@/pages/TownPage/scene/dayNight'
 import { attachLamps, installLampShader } from '@/pages/TownPage/scene/lampShader'
@@ -276,7 +274,7 @@ function PauseEventsWhileMoving({ controls }) {
   return null
 }
 
-/** Plays the fly-in the first time; after a taxi drive, starts above where the car stopped. */
+/** Plays the fly-in the first time; after a walk, starts above where the walk ended. */
 function Intro({ controls, playedRef }) {
   const done = useRef(false)
   useFrame(() => {
@@ -394,25 +392,24 @@ export const TownScene = memo(
       {quality === 'low' && <FrameCap fps={30} />}
       <ViewDistance far={quality === 'low' ? 2600 : 6000} />
 
-      <Ground />
-      <Streets />
-      <Overpasses />
-      <MetroLine />
-      <StreetLamps />
-      <TrafficLights />
-      <LotSignPosts plots={emptyPlots} />
-      <NearSigns plots={emptyPlots} onSelect={showcase || drive || walk ? noop : select} />
-      <EmptyLotGrounds plots={groundPlots} onSelect={showcase || drive || walk ? noop : select} onHover={showcase || drive || walk ? noop : handleHover} />
-      <Surroundings sparse={quality === 'low'} />
-      <PublicPlaces selectedId={selectedId} onSelect={showcase || drive || walk ? noop : select} />
-      <NewUzbekistan />
+      <group name="Ground"><Ground /></group>
+      <group name="Streets"><Streets /></group>
+      <group name="Overpasses"><Overpasses /></group>
+      <group name="MetroLine"><MetroLine /></group>
+      <group name="StreetLamps"><StreetLamps /></group>
+      <group name="TrafficLights"><TrafficLights /></group>
+      <group name="LotSignPosts"><LotSignPosts plots={emptyPlots} /></group>
+      <group name="NearSigns"><NearSigns plots={emptyPlots} onSelect={showcase || drive || walk ? noop : select} /></group>
+      <group name="EmptyLotGrounds"><EmptyLotGrounds plots={groundPlots} onSelect={showcase || drive || walk ? noop : select} onHover={showcase || drive || walk ? noop : handleHover} /></group>
+      <group name="Surroundings"><Surroundings sparse={quality === 'low'} /></group>
+      <group name="PublicPlaces"><PublicPlaces selectedId={selectedId} onSelect={showcase || drive || walk ? noop : select} /></group>
+      <group name="NewUzbekistan"><NewUzbekistan /></group>
       {/* an empty lot is drawn by the shared ground / posts / signs above; it only needs its
           own piece while it is pointed at or picked (or when it is a paved park lot) */}
       {TOWN_PLOTS.filter((p) => !p.public && (ownedById.has(p.id) || p.row === 'P' || p.id === selectedId || p.id === hoveredId)).map((plot) => {
         const owned = ownedById.get(plot.id) ?? null
         return (
-          <Plot
-            key={plot.id}
+          <group name={'Plot:'+(owned?owned.kind:'empty')} key={plot.id}><Plot
             plot={plot}
             owned={owned}
             car={carByPlot.get(plot.id) ?? null}
@@ -421,17 +418,12 @@ export const TownScene = memo(
             hovered={hoveredId === plot.id}
             onSelect={showcase || drive || walk ? noop : select}
             onHover={showcase || drive || walk ? noop : handleHover}
-          />
+          /></group>
         )
       })}
 
       {walk ? (
         <WalkController spawn={walk.spawn} color={walk.color} buildings={walkers} />
-      ) : drive ? (
-        <>
-          <DriveController car={drive.car} spawn={drive.spawn} target={drive.target} onArrive={drive.onArrive} onRedLight={drive.onRedLight} />
-          <TaxiMarkers trip={drive.trip} />
-        </>
       ) : showcase ? (
         <Showcase />
       ) : (

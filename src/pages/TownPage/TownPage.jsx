@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -35,6 +35,8 @@ import {
   PLOT_SIZES,
   INCOME_CAP_H,
   SHOP_ITEMS,
+  carIncomePerHour,
+  pendingCarIncome,
   nextStage,
   pendingIncome,
   stageCost,
@@ -50,9 +52,10 @@ import { BuildPlanner } from '@/pages/TownPage/BuildPlanner'
 import { IslamicBank } from '@/pages/TownPage/IslamicBank'
 import { DayClock } from '@/pages/TownPage/DayClock'
 import { BuyListedPlot, MarketPanel, SellPlotBox } from '@/pages/TownPage/MarketPanel'
-import { HornButton, MiniMap, Speedometer, TouchControls, TripCard, WalkTouchControls } from '@/pages/TownPage/drive/DriveHud'
+import { InsuranceBox } from '@/pages/TownPage/InsuranceBox'
+import { TownDealBanner } from '@/widgets/TownDealBanner/TownDealBanner'
+import { MiniMap, WalkTouchControls } from '@/pages/TownPage/drive/DriveHud'
 import { useDriveKeys, useIsTouch } from '@/pages/TownPage/drive/useDriveKeys'
-import { useDriveHud } from '@/pages/TownPage/drive/driveState'
 import { useWalk } from '@/pages/TownPage/drive/walkState'
 import { detectGpu } from '@/pages/TownPage/scene/gpu'
 import { useClockStore } from '@/pages/TownPage/scene/dayNight'
@@ -106,12 +109,6 @@ function useAction(fn) {
     }
   }
   return [run, busy]
-}
-
-/** 3:05 */
-function fmtClock(ms) {
-  const sec = Math.ceil(ms / 1000)
-  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 }
 
 function useNow(intervalMs = 15_000) {
@@ -271,9 +268,7 @@ function ShopItems({ place, me }) {
   const active =
     place === 'supermarket'
       ? me.builderKits > 0 && `🧰 Sizda ${me.builderKits} ta qurilish to'plami`
-      : place === 'restaurant'
-        ? me.driverUntil > now && `🍽️ Taksi bonusi: yana ${fmtLeft(me.driverUntil - now)}`
-        : me.scholarUntil > now && `🍛 Kutubxona ×1.5: yana ${fmtLeft(me.scholarUntil - now)}`
+      : me.scholarUntil > now && `📚 Kutubxona ×1.5: yana ${fmtLeft(me.scholarUntil - now)}`
   return (
     <div className="space-y-2">
       {active && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200">{active}</p>}
@@ -315,6 +310,7 @@ function MyBuilding({ town, owned, plotId, onQuiz, onPlan }) {
         <button type="button" onClick={onPlan} className={cn(BTN, 'h-12 bg-blue-600 hover:bg-blue-700')}>
           🏗️ Nima quramiz? — loyihani tanlash
         </button>
+        <InsuranceBox plotId={plotId} owned={owned} money={me.money} />
         <SellPlotBox plotId={plotId} owned={owned} />
       </div>
     )
@@ -399,6 +395,7 @@ function MyBuilding({ town, owned, plotId, onQuiz, onPlan }) {
         </div>
       )}
 
+      <InsuranceBox plotId={plotId} owned={owned} money={me.money} />
       <SellPlotBox plotId={plotId} owned={owned} />
       {kind === 'house' && owned.floors > 0 && (owned.design ?? 'classic') !== 'modern' && owned.design !== 'villa' && (
         <div className="space-y-1.5">
@@ -595,8 +592,7 @@ export function TownPage() {
   const [carShop, setCarShop] = useState(false)
   const [showResidents, setShowResidents] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
-  const [driving, setDriving] = useState(false)
-  // walking around on foot (no fuel needed)
+  // walking around on foot (purely local — nothing is sent to the server while walking)
   const [walking, setWalking] = useState(null)
   const walkDoor = useWalk((st) => st.door)
   const walkInside = useWalk((st) => st.inside)
@@ -619,14 +615,11 @@ export function TownPage() {
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [planFor, setPlanFor] = useState(null)
   const [marketOpen, setMarketOpen] = useState(false)
-  const [spawn, setSpawn] = useState(null)
-  const [rideStartedAt, setRideStartedAt] = useState(null)
   const isTouch = useIsTouch()
   const now = useNow(1000)
   const quiz = useTownQuiz()
   const quizOpen = !!quiz
-  const [fuelSync, setFuelSync] = useState({ ms: 0, at: 0 })
-  useDriveKeys((driving || !!walking) && !quizOpen)
+  useDriveKeys(!!walking && !quizOpen)
 
   useEffect(() => {
     const unlock = unlockAudio()
@@ -704,36 +697,24 @@ export function TownPage() {
     }
   }, [sales])
 
-  /* ------------------------------------------------------------ taxi --------------- */
   const startQuiz = (kind, plotId, topicKey) =>
     actions.quizStart(kind, plotId, topicKey).catch((err) => {
       toast.error(err?.data ?? "Boshlab bo'lmadi")
     })
 
-  const trip = me?.trip ?? null
-
-  const requestRide = (near) =>
-    actions.taxiRequest(near).catch((err) => toast.error(err?.data ?? 'Buyurtma olinmadi'))
-
-  const startTaxi = () => {
-    if (!me.car || !myFirstPlot) {
-      toast.error('Taksi uchun avval hovli va mashina kerak')
-      setCarShop(true)
-      return
-    }
-    if (me.fuelMs <= 0) {
-      toast("⛽ Mashina haydash uchun avval test ishlab yoqilg'i oling — har to'g'ri javob 1 daqiqa!")
-      startQuiz('fuel')
-      return
-    }
-    const stop = STOP_BY_ID[myFirstPlot.id]
-    setSpawn({ x: stop.x, z: stop.z, heading: Math.PI / 2 })
-    setSelectedId(null)
-    setShowResidents(false)
-    setDriving(true)
-    toast('🚕 Taksi ishga tushdi! Sariq nurga boring — yo\'lovchi kutyapti.')
-    if (!trip) requestRide({ x: stop.x, z: stop.z })
+  // A car is an asset now: it earns every hour and the owner collects it.
+  const carPending = me?.car ? pendingCarIncome(me.car.model, me.carCollectAt, now) : 0
+  const [collectCar, collectingCar] = useAction(async () => {
+    const amount = await actions.collectCarIncome()
+    playSound('cash')
+    toast.success(`🚗 Mashina daromadi: +${formatMoney(amount)}`)
+  })
+  const onCarClick = () => {
+    if (!me.car) setCarShop(true)
+    else if (carPending >= 100) collectCar()
+    else toast(`🚗 Mashinangiz soatiga ${formatMoney(carIncomePerHour(me.car.model))} ishlaydi — keyinroq yig'ing`)
   }
+  const carLabel = !me?.car ? 'Mashina' : carPending >= 100 ? `+${formatMoney(carPending)}` : "Yig'ilmoqda"
 
   /** Get out and walk: from your own house, or from the centre of town. */
   const startWalk = () => {
@@ -745,98 +726,6 @@ export function TownPage() {
     setWalking({ spawn, color: me.color })
     toast("🚶 Piyoda! Yurish: ↑ / W, burilish: ← → / A D, yugurish: Shift")
   }
-
-  const onArrive = async (kind) => {
-    if (!trip) return
-    try {
-      if (kind === 'pickup') {
-        await actions.taxiPickup(trip.id)
-        playSound('door')
-        setRideStartedAt(null)
-        toast(`🙋 Yo'lovchi o'tirdi! Manzil: ${STOP_BY_ID[trip.toStop].name}. U sizga savol beryapti…`)
-        startQuiz('passenger')
-      } else {
-        const res = await actions.taxiDropoff(trip.id)
-        playSound('door')
-        setTimeout(() => playSound('cash'), 250)
-        setRideStartedAt(null)
-        toast.success(
-          `+${formatMoney(res.fare)}${res.tip ? ' 🙋 choychaqa bilan!' : ''}${res.fast ? ' ⚡ Tez yetkazdingiz, +30%!' : ''}`,
-        )
-        setTimeout(() => {
-          const { x, z } = useDriveHud.getState()
-          requestRide({ x, z })
-        }, 1800)
-      }
-    } catch (err) {
-      toast.error(err?.data ?? 'Xatolik yuz berdi')
-    }
-  }
-
-  /* Fuel: the engine runs (and fuel burns, charged by the server) only while driving with no
-     question on screen. Out of fuel → back to the town and straight into a fuel quiz. */
-  useEffect(() => {
-    if (!driving || quizOpen) return undefined
-    let alive = true
-    const sync = (ms) => {
-      if (!alive) return
-      setFuelSync({ ms, at: Date.now() })
-      if (ms <= 0) {
-        setDriving(false)
-        toast.error("⛽ Benzin tugadi! Test ishlab yoqilg'i oling.")
-        actions.quizStart('fuel').catch(() => {})
-      }
-    }
-    actions
-      .driveStart()
-      .then(sync)
-      .catch((err) => {
-        toast.error(err?.data ?? 'Mashina yurmadi')
-        setDriving(false)
-      })
-    const id = setInterval(() => actions.driveTick().then(sync).catch(() => {}), 10_000)
-    return () => {
-      alive = false
-      clearInterval(id)
-      actions.driveStop().catch(() => {})
-    }
-    // actions are recreated each render; the effect should follow driving / pause only
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driving, quizOpen])
-
-  const fuelShown = driving && !quizOpen && fuelSync.at ? Math.max(0, fuelSync.ms - (now - fuelSync.at)) : (me?.fuelMs ?? 0)
-
-  const onRedLight = async () => {
-    playSound('wrong')
-    try {
-      const fine = await actions.trafficFine()
-      toast.error(`🚦 Qizil chiroqda o'tdingiz! Jarima −${formatMoney(fine)}`)
-    } catch {
-      /* noop */
-    }
-  }
-  // The 3D scene gets stable callbacks that forward to the latest handlers, so the clock
-  // ticking in the HUD never makes the whole scene re-render.
-  const handlers = useRef({ onArrive, onRedLight })
-  useEffect(() => {
-    handlers.current = { onArrive, onRedLight }
-  })
-  const stableArrive = useCallback((...a) => handlers.current.onArrive(...a), [])
-  const stableRedLight = useCallback(() => handlers.current.onRedLight(), [])
-
-  const car = me?.car
-  const drive = useMemo(() => {
-    if (!driving || !car || !spawn) return null
-    const stop = trip ? STOP_BY_ID[trip.status === 'pickup' ? trip.fromStop : trip.toStop] : null
-    return {
-      car,
-      spawn,
-      trip,
-      target: stop ? { x: stop.x, z: stop.z, kind: trip.status, key: `${trip.id}:${trip.status}` } : null,
-      onArrive: stableArrive,
-      onRedLight: stableRedLight,
-    }
-  }, [driving, car, spawn, trip, stableArrive, stableRedLight])
 
   /** Select a plot and fly the camera to it. */
   const focus = (id) => {
@@ -878,7 +767,6 @@ export function TownPage() {
             onSelect={pick}
             quality={quality}
             showcase={!me}
-            drive={drive}
             walk={walking}
             key={me ? 'play' : 'showcase'}
             onReady={markReady}
@@ -929,44 +817,28 @@ export function TownPage() {
                 <AnimatedNumber value={me.money} formatter={formatMoney} />
               </span>
               {me.scholarUntil > now && <span title="Kutubxona ×1.5">🍛</span>}
-              {me.driverUntil > now && <span title="Taksi +25%">🍽️</span>}
               {me.builderKits > 0 && <span title="Qurilish to'plami">🧰{me.builderKits}</span>}
             </Glass>
           )}
         </div>
-        {me && driving && (
-          <div className="pointer-events-auto flex items-center gap-2">
-            <HornButton />
-            <div className="hidden sm:block">
-              <DayClock staff={!!town.viewer?.staff} />
-            </div>
-            <SoundToggle className="bg-white/85 text-gray-900 shadow-lg hover:bg-white" />
-            <div className="hidden sm:block">
-              <HudButton onClick={toggleFullscreen} title="To'liq ekran">
-                {fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-              </HudButton>
-            </div>
-            <HudButton onClick={() => setDriving(false)} title="Taksidan chiqish" className="bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-600">
-              <X className="size-4" /> Chiqish
-            </HudButton>
-          </div>
-        )}
-        {me && !driving && !walking && (
+        {me && !walking && (
           <div className="pointer-events-auto flex items-center gap-2 sm:hidden">
             <DayClock staff={!!town.viewer?.staff} />
             <SoundToggle className="bg-white/85 text-gray-900 shadow-lg hover:bg-white dark:bg-gray-900/85 dark:text-gray-100" />
           </div>
         )}
-        {me && !driving && !walking && (
+        {me && !walking && (
           <div className="pointer-events-auto hidden flex-wrap items-center justify-end gap-2 sm:flex">
             <HudButton onClick={() => setLibraryOpen(true)} title="Kutubxona: savol yechib pul ishlash" className="bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-500 dark:text-white">
               📚 <span className="hidden sm:inline">Kutubxona</span>
             </HudButton>
-            <HudButton onClick={() => startQuiz('fuel')} title="Yoqilg'i: test ishlab haydash vaqti oling" className={fuelShown <= 0 ? 'bg-rose-500 text-white hover:bg-rose-600 dark:bg-rose-500' : ''}>
-              ⛽ <span className="tabular-nums">{fmtClock(fuelShown)}</span>
-            </HudButton>
-            <HudButton onClick={startTaxi} title="Taksi bo'lib ishlash" className="bg-yellow-400 text-yellow-950 hover:bg-yellow-300 dark:bg-yellow-400 dark:text-yellow-950">
-              🚕 Taksi
+            <HudButton
+              onClick={onCarClick}
+              disabled={collectingCar}
+              title={me.car ? "Mashina daromadini yig'ish" : 'Mashina sotib oling — u har soat daromad keltiradi'}
+              className={me.car && carPending >= 100 ? 'bg-yellow-400 text-yellow-950 hover:bg-yellow-300 dark:bg-yellow-400 dark:text-yellow-950' : ''}
+            >
+              🚗 <span className="tabular-nums">{carLabel}</span>
             </HudButton>
             <HudButton onClick={startWalk} title="Piyoda shaharni aylanish">
               🚶 <span className="hidden sm:inline">Piyoda</span>
@@ -1019,40 +891,11 @@ export function TownPage() {
         )}
       </div>
 
-      {/* taxi HUD */}
-      {me && driving && (
-        <>
-          <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-3">
-            <TripCard trip={trip} rideStartedAt={rideStartedAt ?? trip?.pickedAt} stats={{ trips: me.taxiTrips }} />
-          </div>
-          <div className="pointer-events-none absolute top-16 right-3 z-20 hidden lg:block">
-            <MiniMap trip={trip} />
-          </div>
-          <div className={cn('pointer-events-none absolute z-20', isTouch ? 'bottom-44 left-1/2 -translate-x-1/2 scale-75' : 'bottom-4 left-1/2 -translate-x-1/2')}>
-            <div className="flex items-end gap-3">
-              <Speedometer />
-              <div
-                className={cn(
-                  'mb-2 rounded-2xl px-3 py-2 text-center text-white shadow-xl ring-1 ring-white/10 backdrop-blur-md',
-                  fuelShown < 60_000 ? 'animate-pulse bg-rose-600/90' : 'bg-gray-950/75',
-                )}
-              >
-                <p className="text-[10px] font-bold tracking-widest text-white/60">⛽ YOQILG'I</p>
-                <p className="text-xl font-black tabular-nums">{fmtClock(fuelShown)}</p>
-              </div>
-            </div>
-          </div>
-          {isTouch ? (
-            <TouchControls />
-          ) : (
-            <Glass className="pointer-events-none absolute bottom-4 left-4 z-20 space-y-0.5 p-3 text-xs">
-              <p className="font-bold">Boshqaruv</p>
-              <p><b>W / ↑</b> gaz • <b>S / ↓</b> tormoz, orqaga</p>
-              <p><b>A D / ← →</b> rul • <b>Space</b> qo'l tormozi</p>
-              <p><b>H</b> signal • nurga kelib <b>to'xtang</b></p>
-            </Glass>
-          )}
-        </>
+      {/* an open sale / purchase — the town covers the page on phones, so show it here too */}
+      {me && (
+        <div className="pointer-events-auto absolute inset-x-2 top-16 z-30 mx-auto max-w-xl sm:top-16">
+          <TownDealBanner compact />
+        </div>
       )}
 
       {/* walking HUD */}
@@ -1138,12 +981,18 @@ export function TownPage() {
       )}
 
       {/* phones: the main actions in a dock at the bottom, the rest in a menu */}
-      {me && !driving && !walking && !selectedId && (
+      {me && !walking && !selectedId && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:hidden">
           <div className="pointer-events-auto grid grid-cols-5 gap-1.5 rounded-3xl bg-white/90 p-1.5 shadow-2xl ring-1 ring-black/5 backdrop-blur-md dark:bg-gray-900/90">
             <DockButton onClick={() => setLibraryOpen(true)} icon="📚" label="Kutubxona" tone="bg-emerald-500 text-white" />
-            <DockButton onClick={() => startQuiz('fuel')} icon="⛽" label={fmtClock(fuelShown)} tone={fuelShown <= 0 ? 'bg-rose-500 text-white' : ''} />
-            <DockButton onClick={startTaxi} icon="🚕" label="Taksi" tone="bg-yellow-400 text-yellow-950" />
+            <DockButton
+              onClick={onCarClick}
+              disabled={collectingCar}
+              icon="🚗"
+              label={carLabel}
+              tone={me.car && carPending >= 100 ? 'bg-yellow-400 text-yellow-950' : ''}
+            />
+            <DockButton onClick={startWalk} icon="🚶" label="Piyoda" />
             <DockButton
               onClick={claim}
               disabled={!bonusReady || claiming}
@@ -1213,7 +1062,7 @@ export function TownPage() {
       </AnimatePresence>
 
       {/* right side: residents + selected plot */}
-      {me && !driving && !walking && (
+      {me && !walking && (
         <div className="pointer-events-none absolute right-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-30 flex flex-col items-end gap-2 sm:right-3 sm:bottom-3 sm:left-auto">
           {showResidents && <Residents town={town} onPick={focus} />}
           <AnimatePresence mode="wait">
@@ -1223,7 +1072,7 @@ export function TownPage() {
       )}
 
       {/* help */}
-      {me && !selectedId && !driving && !walking && (
+      {me && !selectedId && !walking && (
         <Glass className="pointer-events-none absolute bottom-3 left-3 z-10 hidden max-w-xs space-y-1 p-3 text-xs sm:block">
           <p className="flex items-center gap-1.5 font-bold">
             <MousePointerClick className="size-4 text-blue-600" /> Qanday o'ynaladi
@@ -1270,7 +1119,7 @@ export function TownPage() {
           />
         )}
       </AnimatePresence>
-      {me && <QuizModal onBuilt={(plotId) => focus(plotId)} onFuelDone={() => !driving && startTaxi()} />}
+      {me && <QuizModal onBuilt={(plotId) => focus(plotId)} />}
     </div>
   )
 }

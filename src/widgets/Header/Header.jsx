@@ -24,6 +24,7 @@ const PAGE_TITLES = {
   [ROUTES.GROUPS]: 'Guruhlar',
   [ROUTES.COIN_MARKET]: 'Coin Market',
   [ROUTES.ORDERS]: 'Buyurtmalar',
+  [ROUTES.INSURANCE]: "Sug'urta da'volari",
   [ROUTES.LEADERBOARD]: 'Reyting',
   [ROUTES.SETTINGS]: 'Sozlamalar',
   [ROUTES.TESTS]: 'Testlar',

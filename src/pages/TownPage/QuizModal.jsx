@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { BookOpen, Calculator, Check, Flame, Fuel, HardHat, Loader2, Sparkles, User, X } from 'lucide-react'
+import { BookOpen, Calculator, Check, Flame, HardHat, Loader2, Sparkles, X } from 'lucide-react'
 import { CodeBlock } from '@/shared/ui/code-block'
 import { playSound } from '@/shared/lib/sound/gameSounds'
 import { useTownActions, useTownQuiz } from '@/entities/town/model/store'
@@ -12,12 +12,9 @@ import { cn } from '@/shared/lib/utils'
 const THEMES = {
   library: { title: 'Kutubxona', icon: BookOpen, bg: 'bg-gradient-to-br from-emerald-600 via-teal-600 to-sky-700' },
   build: { title: 'Qurilish imtihoni', icon: HardHat, bg: 'bg-gradient-to-br from-amber-600 via-orange-600 to-rose-700' },
-  fuel: { title: "Yoqilg'i quyish", icon: Fuel, bg: 'bg-gradient-to-br from-sky-600 via-indigo-600 to-violet-700' },
-  passenger: { title: "Yo'lovchi savoli", icon: User, bg: 'bg-gradient-to-br from-yellow-500 via-amber-500 to-orange-600' },
   collect: { title: 'Hisobchi savoli', icon: Calculator, bg: 'bg-gradient-to-br from-emerald-600 via-green-600 to-lime-700' },
 }
 
-const minutes = (ms) => Math.round(ms / 60_000)
 
 function Progress({ total, index, results }) {
   return (
@@ -46,18 +43,8 @@ function FinalScreen({ final, onClose, onAgain, onLibrary }) {
         transition={{ duration: 0.8 }}
         className="text-7xl"
       >
-        {kind === 'library' ? '📚' : kind === 'fuel' ? '⛽' : passed ? '🏗️' : '😅'}
+        {kind === 'library' ? '📚' : passed ? '🏗️' : '😅'}
       </motion.div>
-      {kind === 'fuel' && (
-        <>
-          <h3 className="text-3xl font-black">Bak to'ldi! ⛽</h3>
-          <p className="text-white/80">
-            {result.correctTotal} / {result.total} to'g'ri javob
-          </p>
-          <p className="text-4xl font-black text-sky-200">+{minutes(result.earned)} daqiqa haydash</p>
-          <p className="text-sm text-white/70">Har bir to'g'ri javob — 1 daqiqa yo'l.</p>
-        </>
-      )}
       {kind === 'library' && (
         <>
           <h3 className="text-3xl font-black">Barakalla!</h3>
@@ -86,11 +73,6 @@ function FinalScreen({ final, onClose, onAgain, onLibrary }) {
         </>
       )}
       <div className="flex flex-wrap justify-center gap-2">
-        {kind === 'fuel' && (
-          <button type="button" onClick={onAgain} className="h-12 cursor-pointer rounded-xl bg-sky-500 px-6 font-black text-white shadow-lg hover:bg-sky-600">
-            ⛽ Yana quyish
-          </button>
-        )}
         {kind === 'library' && (
           <button type="button" onClick={onAgain} className="h-12 cursor-pointer rounded-xl bg-emerald-500 px-6 font-black text-white shadow-lg hover:bg-emerald-600">
             📚 Yana o'qish
@@ -102,7 +84,7 @@ function FinalScreen({ final, onClose, onAgain, onLibrary }) {
           </button>
         )}
         <button type="button" onClick={onClose} className="h-12 cursor-pointer rounded-xl bg-white/15 px-6 font-bold hover:bg-white/25">
-          {passed && result.built ? "Uyni ko'rish" : kind === 'fuel' ? '🚕 Haydashga' : 'Yopish'}
+          {passed && result.built ? "Uyni ko'rish" : 'Yopish'}
         </button>
       </div>
     </motion.div>
@@ -111,7 +93,7 @@ function FinalScreen({ final, onClose, onAgain, onLibrary }) {
 
 /** Library sessions and building exams. Lives over the town; opens whenever a session is
  * active (or its result is still being shown). */
-export function QuizModal({ onBuilt, onFuelDone }) {
+export function QuizModal({ onBuilt }) {
   const quiz = useTownQuiz()
   const actions = useTownActions()
   const [feedback, setFeedback] = useState(null) // { snapshot, selected, result }
@@ -150,15 +132,9 @@ export function QuizModal({ onBuilt, onFuelDone }) {
       setFeedback(null)
       return
     }
-    if (r.status !== 'active' && feedback.snapshot.kind === 'passenger') {
-      toast(r.correct ? "🙋 Yo'lovchi xursand: manzilda +50% choychaqa!" : "🙋 Yo'lovchi: «Mayli, keyingi safar bilib olasiz»")
-      setFeedback(null)
-      return
-    }
     if (r.status !== 'active') {
       const plotId = feedback.snapshot.plotId
       setFinal({ kind: feedback.snapshot.kind, result: r, plotId, plotNumber: plotId ? PLOT_BY_ID[plotId]?.number : null })
-      if (feedback.snapshot.kind === 'fuel' && r.earned > 0) playSound('engine')
       if (r.status === 'passed') {
         playSound('build')
         setTimeout(() => playSound('fanfare'), 900)
@@ -178,7 +154,6 @@ export function QuizModal({ onBuilt, onFuelDone }) {
 
   const close = async () => {
     if (final?.result.built && final.plotId) onBuilt?.(final.plotId)
-    if (final?.kind === 'fuel' && final.result.earned > 0) onFuelDone?.()
     setFinal(null)
     setFeedback(null)
     if (quiz) await actions.quizCancel().catch(() => {})
@@ -187,7 +162,7 @@ export function QuizModal({ onBuilt, onFuelDone }) {
   if (!open) return null
   const kind = final?.kind ?? view?.kind ?? 'library'
   const isBuild = kind === 'build'
-  const theme = THEMES[kind]
+  const theme = THEMES[kind] ?? THEMES.library
   const q = view?.question
 
   return (
@@ -210,11 +185,7 @@ export function QuizModal({ onBuilt, onFuelDone }) {
               <span className="rounded-xl bg-black/20 px-3 py-1.5 text-sm font-bold tabular-nums">
                 {isBuild
                   ? `${view.correct + (feedback?.result.correct ? 1 : 0)} / ${view.need} kerak`
-                  : kind === 'fuel'
-                    ? `⛽ +${minutes(feedback?.result.earned ?? view.earned)} daq`
-                    : kind === 'passenger'
-                      ? `+${Math.round(LEARN.PASSENGER_TIP * 100)}% choychaqa`
-                      : kind === 'collect'
+                  : kind === 'collect'
                         ? 'Daromad yig\'ish'
                       : `+${formatMoney(feedback?.result.earned ?? view.earned)}`}
               </span>
@@ -319,15 +290,9 @@ export function QuizModal({ onBuilt, onFuelDone }) {
                   <div>
                     <p className="text-2xl font-black">{feedback.result.correct ? "To'g'ri! 🎉" : "Noto'g'ri 😕"}</p>
                     <p className="text-sm font-semibold text-white/90">
-                      {feedback.result.correct && kind === 'fuel'
-                        ? feedback.result.fuelAdded > 0
-                          ? '+1 daqiqa haydash vaqti ⛽'
-                          : "Bak to'la!"
-                        : feedback.result.correct && kind === 'collect'
+                      {feedback.result.correct && kind === 'collect'
                           ? `+${formatMoney(feedback.result.collected)} hisobingizga`
-                        : feedback.result.correct && kind === 'passenger'
-                          ? "Yo'lovchi xursand — manzilda choychaqa beradi!"
-                          : feedback.result.correct
+                        : feedback.result.correct
                         ? feedback.result.reward
                           ? `+${formatMoney(feedback.result.reward)}${feedback.result.streak >= 2 ? ` • ${feedback.result.streak} ketma-ket bonus!` : ''}`
                           : 'Imtihon davom etmoqda'

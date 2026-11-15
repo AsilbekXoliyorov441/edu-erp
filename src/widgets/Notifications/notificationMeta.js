@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, KeyRound, ListChecks, PackageCheck, ShoppingBag, XCircle } from 'lucide-react'
+import { Ban, Building2, CheckCircle2, Handshake, KeyRound, ListChecks, PackageCheck, ShieldAlert, ShieldCheck, ShieldX, ShoppingBag, Timer, XCircle } from 'lucide-react'
 
 /** Icon + tone per notification type. */
 export const NOTIFICATION_META = {
@@ -9,6 +9,14 @@ export const NOTIFICATION_META = {
   order_rejected: { icon: XCircle, tone: 'bg-destructive/15 text-destructive' },
   pin_reset: { icon: KeyRound, tone: 'bg-primary/10 text-primary' },
   lesson_quiz: { icon: ListChecks, tone: 'bg-success/15 text-success' },
+  town_warning: { icon: ShieldAlert, tone: 'bg-destructive/15 text-destructive' },
+  town_restored: { icon: Building2, tone: 'bg-success/15 text-success' },
+  town_deal_started: { icon: Timer, tone: 'bg-warning/15 text-warning' },
+  town_deal_done: { icon: Handshake, tone: 'bg-success/15 text-success' },
+  town_deal_cancelled: { icon: Ban, tone: 'bg-muted text-muted-foreground' },
+  insurance_claim: { icon: ShieldAlert, tone: 'bg-warning/15 text-warning' },
+  insurance_paid: { icon: ShieldCheck, tone: 'bg-success/15 text-success' },
+  insurance_rejected: { icon: ShieldX, tone: 'bg-destructive/15 text-destructive' },
 }
 
 export function getNotificationMeta(type) {

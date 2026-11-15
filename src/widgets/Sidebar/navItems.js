@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Store, ShoppingBag, Trophy, Settings2, Wallet, ShieldCheck, ListChecks, Building2, Gamepad2 } from 'lucide-react'
+import { LayoutDashboard, Users, Store, ShoppingBag, Trophy, Settings2, Wallet, ShieldCheck, ListChecks, Building2, Gamepad2, ShieldPlus } from 'lucide-react'
 import { ROLES, ROUTES } from '@/shared/config/constants'
 
 /** `mobilePriority` (lower = shown first) picks the bottom-nav order on mobile independent
@@ -14,6 +14,7 @@ export const NAV_ITEMS = [
   { to: ROUTES.ORDERS, label: 'Buyurtmalar', icon: ShoppingBag, roles: [ROLES.TEACHER, ROLES.STUDENT], mobilePriority: 2.5, badge: 'orders' },
   { to: ROUTES.LEADERBOARD, label: 'Reyting', icon: Trophy, roles: [ROLES.TEACHER, ROLES.STUDENT], mobilePriority: 5 },
   { to: ROUTES.TEACHERS_DASHBOARD, label: 'Teachers Dashboard', icon: Wallet, roles: [ROLES.TEACHER] },
+  { to: ROUTES.INSURANCE, label: "Sug'urta da'volari", icon: ShieldPlus, roles: [ROLES.TEACHER], superAdminOnly: true, badge: 'claims' },
   { to: ROUTES.TEACHERS_MANAGEMENT, label: 'Ustozlarni boshqarish', icon: ShieldCheck, roles: [ROLES.TEACHER], superAdminOnly: true },
   { to: ROUTES.SETTINGS, label: 'Sozlamalar', icon: Settings2, roles: [ROLES.TEACHER] },
 ]

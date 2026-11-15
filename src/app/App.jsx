@@ -8,6 +8,7 @@ import { convexClient } from '@/shared/lib/convex/client'
 import { Toaster } from '@/shared/ui/sonner'
 import { TooltipProvider } from '@/shared/ui/tooltip'
 import { AppRouter } from '@/app/router/AppRouter'
+import { SessionBoundary } from '@/app/SessionBoundary'
 
 function SplashScreen() {
   const hydrateError = useAuthStore((s) => s.hydrateError)
@@ -57,6 +58,7 @@ function SplashScreen() {
 const App = () => {
   const hydrated = useAuthStore((s) => s.hydrated)
   const hydrateAuth = useAuthStore((s) => s.hydrate)
+  const token = useAuthStore((s) => s.token)
   const theme = useThemeStore((s) => s.theme)
   const setTheme = useThemeStore((s) => s.setTheme)
 
@@ -76,7 +78,9 @@ const App = () => {
       ) : (
         <BrowserRouter>
           <TooltipProvider delayDuration={200}>
-            <AppRouter />
+            <SessionBoundary key={token ?? 'signed-out'}>
+              <AppRouter />
+            </SessionBoundary>
             <Toaster theme={theme} />
           </TooltipProvider>
         </BrowserRouter>

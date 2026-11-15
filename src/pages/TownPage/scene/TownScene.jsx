@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { PLOT_BY_ID, TOWN_PLOTS } from '@/shared/config/town'
 import { Ground, Overpasses, StreetLamps, Streets, TrafficLights } from '@/pages/TownPage/scene/Streets'
 import { Surroundings } from '@/pages/TownPage/scene/Nature'
-import { EmptyLotGrounds, LotSignPosts, NearSigns, Plot } from '@/pages/TownPage/scene/Plot'
+import { EmptyLotGrounds, LotSignPosts, NearSigns, Plot, PlotCell, CELL } from '@/pages/TownPage/scene/Plot'
 import { PublicPlaces } from '@/pages/TownPage/scene/PublicPlaces'
 import { NewUzbekistan } from '@/pages/TownPage/scene/NewUzbekistan'
 import { MetroLine } from '@/pages/TownPage/scene/MetroLine'
@@ -337,6 +337,21 @@ export const TownScene = memo(
     return map
   }, [players, plots, drive, meId])
 
+  // Owned plots are drawn per map cell, merged together (see <PlotCell>).
+  const cells = useMemo(() => {
+    const map = new Map()
+    for (const owned of plots ?? []) {
+      const plot = PLOT_BY_ID[owned.plotId]
+      if (!plot) continue
+      const ix = Math.floor(plot.x / CELL)
+      const iz = Math.floor(plot.z / CELL)
+      const key = `${ix}:${iz}`
+      if (!map.has(key)) map.set(key, { key, cx: (ix + 0.5) * CELL, cz: (iz + 0.5) * CELL, items: [] })
+      map.get(key).items.push({ plot, owned, car: carByPlot.get(plot.id) ?? null })
+    }
+    return [...map.values()]
+  }, [plots, carByPlot])
+
   const flyTo = useCallback((plotId) => {
     const plot = PLOT_BY_ID[plotId]
     if (!plot || !controls.current) return
@@ -406,21 +421,32 @@ export const TownScene = memo(
       <group name="NewUzbekistan"><NewUzbekistan /></group>
       {/* an empty lot is drawn by the shared ground / posts / signs above; it only needs its
           own piece while it is pointed at or picked (or when it is a paved park lot) */}
-      {TOWN_PLOTS.filter((p) => !p.public && (ownedById.has(p.id) || p.row === 'P' || p.id === selectedId || p.id === hoveredId)).map((plot) => {
-        const owned = ownedById.get(plot.id) ?? null
-        return (
-          <group name={'Plot:'+(owned?owned.kind:'empty')} key={plot.id}><Plot
-            plot={plot}
-            owned={owned}
-            car={carByPlot.get(plot.id) ?? null}
-            isMine={!!owned && owned.ownerId === town?.me?.id}
-            selected={selectedId === plot.id}
-            hovered={hoveredId === plot.id}
-            onSelect={showcase || drive || walk ? noop : select}
-            onHover={showcase || drive || walk ? noop : handleHover}
-          /></group>
-        )
-      })}
+      {cells.map((cell) => (
+        <PlotCell
+          key={cell.key}
+          cx={cell.cx}
+          cz={cell.cz}
+          items={cell.items}
+          selectedId={selectedId}
+          hoveredId={hoveredId}
+          meId={meId}
+          onSelect={showcase || drive || walk ? noop : select}
+          onHover={showcase || drive || walk ? noop : handleHover}
+        />
+      ))}
+      {TOWN_PLOTS.filter((p) => !p.public && !ownedById.has(p.id) && (p.row === 'P' || p.id === selectedId || p.id === hoveredId)).map((plot) => (
+        <Plot
+          key={plot.id}
+          plot={plot}
+          owned={null}
+          car={null}
+          isMine={false}
+          selected={selectedId === plot.id}
+          hovered={hoveredId === plot.id}
+          onSelect={showcase || drive || walk ? noop : select}
+          onHover={showcase || drive || walk ? noop : handleHover}
+        />
+      ))}
 
       {walk ? (
         <WalkController spawn={walk.spawn} color={walk.color} buildings={walkers} />

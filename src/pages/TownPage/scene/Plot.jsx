@@ -13,6 +13,21 @@ import { buildingBox, yardLayout } from '@/pages/TownPage/scene/buildingInfo'
 import { Car } from '@/pages/TownPage/scene/Car'
 
 
+/* Shared materials. Baking merges meshes per material, so a material made fresh for every
+ * plot (an inline <meshStandardMaterial>) keeps each plot's piece a separate draw call. These
+ * pools give every plot of the same size / colour the very same material instead. */
+const pooled = new Map()
+function pool(key, make) {
+  if (!pooled.has(key)) pooled.set(key, make())
+  return pooled.get(key)
+}
+const lawnMaterial = (w, d) =>
+  pool(`lawn:${w}x${d}`, () => new THREE.MeshStandardMaterial({ map: grassTexture([w / 6, d / 6]), color: '#b6d39a', roughness: 1 }))
+const pavingMaterial = (w, d) =>
+  pool(`paving:${w}x${d}`, () => new THREE.MeshStandardMaterial({ map: concreteTexture([w / 3, d / 3]), color: '#e8dfcf', roughness: 0.85 }))
+const drivewayMaterial = () => pool('driveway', () => new THREE.MeshStandardMaterial({ map: concreteTexture([1, 3]), roughness: 0.9 }))
+const walkwayMaterial = () => pool('walkway', () => new THREE.MeshStandardMaterial({ map: concreteTexture([1, 3]), color: '#d9cfc0', roughness: 0.9 }))
+
 function SelectionFrame({ w, d, color }) {
   const material = useMemo(
     () =>
@@ -171,7 +186,10 @@ export function LotSignPosts({ plots }) {
   )
 }
 
-function OwnerTag({ owned, isMine, x, z }) {
+function OwnerTag({ owned, isMine, x, z, show }) {
+  // A DOM label is re-positioned by JavaScript on every frame — fine for a few, a real cost
+  // for a hundred. Only your own plots and the one pointed at / picked get one.
+  if (!show) return null
   const box = buildingBox(owned.kind, owned.design, owned.floors)
   return (
     <Html position={[x, Math.max(5, box.h) + 2.5, z]} center zIndexRange={[20, 0]}>
@@ -333,9 +351,6 @@ function gardenTrees(plot, b, tight) {
   return list.slice(0, 18)
 }
 
-/** Beyond this distance (m) a yard is drawn as a simple block. */
-const FAR = 480
-
 const FAR_COLORS = {
   house: '#efe4cf',
   shop: '#f3e8da',
@@ -371,10 +386,8 @@ function FarBuilding({ owned }) {
   )
 }
 
-function OwnedYard({ plot, owned, car, isMine }) {
+function OwnedYard({ plot, owned, car, isMine, showTag }) {
   const m = getMaterials()
-  const lawn = useMemo(() => grassTexture([plot.w / 6, plot.d / 6]), [plot.w, plot.d])
-  const concrete = useMemo(() => concreteTexture([1, 3]), [])
   const halfW = plot.w / 2
   const halfD = plot.d / 2
   const box = buildingBox(owned.kind, owned.design, Math.max(1, owned.floors))
@@ -388,76 +401,82 @@ function OwnedYard({ plot, owned, car, isMine }) {
   const front = bz + box.d / 2
   const carPos = tight ? [plot.w > 22 ? Math.min(halfW - 3, box.w / 2 - 2.5) : 2.7, 0.1, halfD - 2.6] : [5.6, 0.1, halfD - 6]
   const roomy = plot.d > 24 || plot.w > 30
-  const bakeKey = `${owned.kind}:${owned.design}:${owned.floors}:${owned.style}:${car?.model}:${car?.color}:${owned.salePrice}:${owned.ownerColor}`
   const trees = useMemo(() => (roomy ? gardenTrees(plot, { x: bx, z: bz, w: box.w, d: box.d }, tight) : []), [roomy, plot, bx, bz, box.w, box.d, tight])
 
+  // Everything here is static and gets merged with the other plots of its map cell (see
+  // <PlotCell>); only the construction site and the name label stay live.
   return (
     <group>
-      <mesh position-y={0.08} rotation-x={-Math.PI / 2} receiveShadow>
+      <mesh position-y={0.08} rotation-x={-Math.PI / 2} material={lawnMaterial(plot.w, plot.d)} receiveShadow>
         <planeGeometry args={[plot.w, plot.d]} />
-        <meshStandardMaterial map={lawn} color="#b6d39a" roughness={1} />
       </mesh>
-      <Lod distance={FAR}>
-        <group>
-          <Baked bakeKey={bakeKey}>
-            {!tight && (
-              <mesh position={[5.6, 0.1, halfD - 7]} rotation-x={-Math.PI / 2} receiveShadow>
-                <planeGeometry args={[4.6, 14]} />
-                <meshStandardMaterial map={concrete} roughness={0.9} />
-              </mesh>
-            )}
-            {/* stone walkway to the door */}
-            <mesh position={[tight ? 0 : bx - 2.6, 0.1, (front + 1.5 + halfD) / 2]} rotation-x={-Math.PI / 2} receiveShadow>
-              <planeGeometry args={[tight ? 2.4 : 1.6, Math.max(0.5, halfD - (front + 1.5))]} />
-              <meshStandardMaterial map={concrete} color="#d9cfc0" roughness={0.9} />
-            </mesh>
-            {/* hedges: sides + back */}
-            {[-1, 1].map((s) => (
-              <mesh key={s} position={[s * (halfW - 0.35), 0.55, -1]} material={m.hedge} castShadow receiveShadow>
-                <boxGeometry args={[0.7, 1.1, plot.d - 2]} />
-              </mesh>
-            ))}
-            <mesh position={[0, 0.55, -halfD + 0.35]} material={m.hedge} castShadow receiveShadow>
-              <boxGeometry args={[plot.w, 1.1, 0.7]} />
-            </mesh>
-            {/* mailbox in the owner's color */}
-            <group position={[-halfW + 1.4, 0, halfD - 0.8]}>
-              <mesh position-y={0.55} material={m.metalDark}>
-                <cylinderGeometry args={[0.05, 0.05, 1.1, 6]} />
-              </mesh>
-              <mesh position-y={1.2} castShadow>
-                <boxGeometry args={[0.45, 0.32, 0.6]} />
-                <meshStandardMaterial color={owned.ownerColor} roughness={0.4} />
-              </mesh>
-            </group>
-            {!roomy && owned.kind === 'house' && !tight && <YardTree x={-6.5} z={-8.5} s={1.1} />}
-            {!roomy && !tight && <YardTree x={6.5} z={-8} s={0.9} />}
-            {trees.map((t) => (
-              <YardTree key={`${t.x}:${t.z}`} x={t.x} z={t.z} s={t.s} />
-            ))}
-            <group position={[bx, 0, bz]}>
-              <Building kind={owned.kind} design={owned.design} floors={owned.floors} styleId={owned.style} seed={plot.number ?? 0} />
-              {owned.builtAt && (
-                <group userData={{ live: true }}>
-                  <ConstructionSite key={owned.builtAt} box={buildingBox(owned.kind, owned.design, owned.floors)} floors={owned.floors} builtAt={owned.builtAt} />
-                </group>
-              )}
-            </group>
-            {car && (
-              <group position={carPos} rotation-y={tight ? Math.PI / 2 : 0}>
-                <Car model={car.model} color={car.color} />
-              </group>
-            )}
-            {owned.salePrice && <ForSaleSign plot={plot} price={owned.salePrice} resale posts x={tight ? -3 : 0} />}
-          </Baked>
-        </group>
-        {/* far away: just the building's block — a handful of meshes instead of hundreds */}
-        <group position={[bx, 0, bz]}>{owned.floors > 0 && <FarBuilding owned={owned} />}</group>
-      </Lod>
+      {!tight && (
+        <mesh position={[5.6, 0.1, halfD - 7]} rotation-x={-Math.PI / 2} material={drivewayMaterial()} receiveShadow>
+          <planeGeometry args={[4.6, 14]} />
+        </mesh>
+      )}
+      {/* stone walkway to the door */}
+      <mesh position={[tight ? 0 : bx - 2.6, 0.1, (front + 1.5 + halfD) / 2]} rotation-x={-Math.PI / 2} material={walkwayMaterial()} receiveShadow>
+        <planeGeometry args={[tight ? 2.4 : 1.6, Math.max(0.5, halfD - (front + 1.5))]} />
+      </mesh>
+      {/* hedges: sides + back */}
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * (halfW - 0.35), 0.55, -1]} material={m.hedge} castShadow receiveShadow>
+          <boxGeometry args={[0.7, 1.1, plot.d - 2]} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.55, -halfD + 0.35]} material={m.hedge} castShadow receiveShadow>
+        <boxGeometry args={[plot.w, 1.1, 0.7]} />
+      </mesh>
+      {/* mailbox in the owner's color */}
+      <group position={[-halfW + 1.4, 0, halfD - 0.8]}>
+        <mesh position-y={0.55} material={m.metalDark}>
+          <cylinderGeometry args={[0.05, 0.05, 1.1, 6]} />
+        </mesh>
+        <mesh position-y={1.2} material={plainMaterial(owned.ownerColor, { roughness: 0.4 })} castShadow>
+          <boxGeometry args={[0.45, 0.32, 0.6]} />
+        </mesh>
+      </group>
+      {!roomy && owned.kind === 'house' && !tight && <YardTree x={-6.5} z={-8.5} s={1.1} />}
+      {!roomy && !tight && <YardTree x={6.5} z={-8} s={0.9} />}
+      {trees.map((t) => (
+        <YardTree key={`${t.x}:${t.z}`} x={t.x} z={t.z} s={t.s} />
+      ))}
       <group position={[bx, 0, bz]}>
+        <Building kind={owned.kind} design={owned.design} floors={owned.floors} styleId={owned.style} seed={plot.number ?? 0} />
+        {owned.builtAt && (
+          <group userData={{ live: true }}>
+            <ConstructionSite key={owned.builtAt} box={buildingBox(owned.kind, owned.design, owned.floors)} floors={owned.floors} builtAt={owned.builtAt} />
+          </group>
+        )}
         <BuildingGlow owned={owned} />
       </group>
-      <OwnerTag owned={owned} isMine={isMine} x={bx} z={bz} />
+      {car && (
+        <group position={carPos} rotation-y={tight ? Math.PI / 2 : 0}>
+          <Car model={car.model} color={car.color} />
+        </group>
+      )}
+      {owned.salePrice && <ForSaleSign plot={plot} price={owned.salePrice} resale posts x={tight ? -3 : 0} />}
+      <OwnerTag owned={owned} isMine={isMine} x={bx} z={bz} show={showTag} />
+    </group>
+  )
+}
+
+/** What a plot looks like from far away: the lawn and its building as a plain block (plus
+ * the night glow) — a handful of meshes instead of hundreds. */
+export function FarYard({ plot, owned }) {
+  const { bx, bz } = yardLayout(plot, owned.kind, owned.design, owned.floors)
+  return (
+    <group position={[plot.x, 0, plot.z]} rotation-y={plot.rotation}>
+      <mesh position-y={0.08} rotation-x={-Math.PI / 2} material={plot.row === 'P' ? pavingMaterial(plot.w, plot.d) : lawnMaterial(plot.w, plot.d)}>
+        <planeGeometry args={[plot.w, plot.d]} />
+      </mesh>
+      {owned.floors > 0 && (
+        <group position={[plot.row === 'P' ? 0 : bx, 0, bz]}>
+          <FarBuilding owned={owned} />
+          <BuildingGlow owned={owned} />
+        </group>
+      )}
     </group>
   )
 }
@@ -490,8 +509,7 @@ function ParasolTable({ x, z, color }) {
 
 /** A park lot: a paved little square with the stall or shop at the back, café tables in
  * front and flower planters at the corners — no fences, it belongs to the park. */
-function ParkYard({ plot, owned, isMine }) {
-  const stone = useMemo(() => concreteTexture([plot.w / 3, plot.d / 3]), [plot.w, plot.d])
+function ParkYard({ plot, owned, isMine, showTag }) {
   const halfW = plot.w / 2
   const halfD = plot.d / 2
   const box = buildingBox(owned.kind, owned.design, Math.max(1, owned.floors))
@@ -501,11 +519,10 @@ function ParkYard({ plot, owned, isMine }) {
   const flowers = ['#f43f5e', '#f59e0b', '#a855f7', '#ec4899']
   return (
     <group>
-      <mesh position-y={0.08} rotation-x={-Math.PI / 2} receiveShadow>
+      <mesh position-y={0.08} rotation-x={-Math.PI / 2} material={pavingMaterial(plot.w, plot.d)} receiveShadow>
         <planeGeometry args={[plot.w, plot.d]} />
-        <meshStandardMaterial map={stone} color="#e8dfcf" roughness={0.85} />
       </mesh>
-      <Baked bakeKey={`${owned.kind}:${owned.design}:${owned.floors}:${owned.salePrice}`}>
+      <>
         {/* kerb round the square */}
         {[
           [0, halfD - 0.1, plot.w, 0.2],
@@ -528,9 +545,8 @@ function ParkYard({ plot, owned, isMine }) {
             <mesh position-y={0.35} material={plainMaterial('#a8a29e')} castShadow>
               <cylinderGeometry args={[0.6, 0.5, 0.7, 12]} />
             </mesh>
-            <mesh position-y={0.85}>
+            <mesh position-y={0.85} material={plainMaterial(flowers[k], { roughness: 0.9 })}>
               <sphereGeometry args={[0.55, 10, 8]} />
-              <meshStandardMaterial color={flowers[k]} roughness={0.9} />
             </mesh>
           </group>
         ))}
@@ -544,16 +560,16 @@ function ParkYard({ plot, owned, isMine }) {
           </>
         )}
         {owned.salePrice && <ForSaleSign plot={plot} price={owned.salePrice} resale posts x={-3} />}
-      </Baked>
+      </>
       {owned.builtAt && (
-        <group position={[0, 0, bz]}>
+        <group position={[0, 0, bz]} userData={{ live: true }}>
           <ConstructionSite key={owned.builtAt} box={buildingBox(owned.kind, owned.design, owned.floors)} floors={owned.floors} builtAt={owned.builtAt} />
         </group>
       )}
       <group position={[0, 0, bz]}>
         <BuildingGlow owned={owned} />
       </group>
-      <OwnerTag owned={owned} isMine={isMine} x={0} z={bz} />
+      <OwnerTag owned={owned} isMine={isMine} x={0} z={bz} show={showTag} />
     </group>
   )
 }
@@ -612,14 +628,12 @@ export function EmptyLotGrounds({ plots, onSelect, onHover }) {
 
 function EmptyLot({ plot }) {
   const park = plot.row === 'P'
-  const dirt = useMemo(() => (park ? concreteTexture([plot.w / 3, plot.d / 3]) : dirtTexture([plot.w / 7, plot.d / 7])), [plot.w, plot.d, park])
   return (
     <group>
       {/* park lots are paved; every other lot's ground is drawn by <EmptyLotGrounds> */}
       {park && (
-        <mesh position-y={0.06} rotation-x={-Math.PI / 2} receiveShadow>
+        <mesh position-y={0.06} rotation-x={-Math.PI / 2} material={pavingMaterial(plot.w, plot.d)} receiveShadow>
           <planeGeometry args={[plot.w, plot.d]} />
-          <meshStandardMaterial map={dirt} roughness={1} color="#e8dfcf" />
         </mesh>
       )}
       {/* the sale sign: drawn by <NearSigns> for the lots near the camera */}
@@ -642,14 +656,74 @@ export const Plot = memo(function Plot({ plot, owned, car, isMine, selected, hov
       }}
       onPointerOut={() => onHover(null)}
     >
-      {owned ? plot.row === 'P' ? <ParkYard plot={plot} owned={owned} isMine={isMine} /> : <OwnedYard plot={plot} owned={owned} car={car} isMine={isMine} /> : <EmptyLot plot={plot} />}
+      {owned ? (
+        plot.row === 'P' ? (
+          <ParkYard plot={plot} owned={owned} isMine={isMine} showTag={isMine || selected || hovered} />
+        ) : (
+          <OwnedYard plot={plot} owned={owned} car={car} isMine={isMine} showTag={isMine || selected || hovered} />
+        )
+      ) : (
+        <EmptyLot plot={plot} />
+      )}
       {hovered && !selected && (
-        <mesh position-y={0.2} rotation-x={-Math.PI / 2}>
+        <mesh position-y={0.2} rotation-x={-Math.PI / 2} userData={{ live: true }}>
           <planeGeometry args={[plot.w, plot.d]} />
           <meshBasicMaterial color="#ffffff" transparent opacity={0.12} depthWrite={false} />
         </mesh>
       )}
-      {selected && <SelectionFrame w={plot.w} d={plot.d} color={isMine ? '#3b82f6' : '#f59e0b'} />}
+      {selected && (
+        <group userData={{ live: true }}>
+          <SelectionFrame w={plot.w} d={plot.d} color={isMine ? '#3b82f6' : '#f59e0b'} />
+        </group>
+      )}
+    </group>
+  )
+})
+
+/** Map cell size (m) for merging owned plots, and how far a cell's centre may be before it
+ * switches to the plain far-away look. */
+export const CELL = 400
+const CELL_FAR = 700
+
+/** The owned plots of one map cell. Every static mesh of all of them is merged per material
+ * (<Baked>), so a cell costs a few dozen draw calls however many buildings it holds, instead
+ * of ~16 per plot. Far away the whole cell swaps to plain blocks (one LOD per cell rather than
+ * one per plot). Selection, hover, construction sites and name labels stay live. */
+export const PlotCell = memo(function PlotCell({ cx, cz, items, selectedId, hoveredId, meId, onSelect, onHover }) {
+  const nearKey = items
+    .map(({ plot, owned, car }) =>
+      [plot.id, owned.kind, owned.design, owned.floors, owned.style, owned.salePrice, owned.ownerColor, car?.model, car?.color].join(':'),
+    )
+    .join('|')
+  const farKey = items.map(({ plot, owned }) => [plot.id, owned.kind, owned.design, owned.floors].join(':')).join('|')
+  return (
+    <group position={[cx, 0, cz]}>
+      <Lod distance={CELL_FAR}>
+        <group position={[-cx, 0, -cz]}>
+          <Baked bakeKey={nearKey}>
+            {items.map(({ plot, owned, car }) => (
+              <Plot
+                key={plot.id}
+                plot={plot}
+                owned={owned}
+                car={car}
+                isMine={owned.ownerId === meId}
+                selected={selectedId === plot.id}
+                hovered={hoveredId === plot.id}
+                onSelect={onSelect}
+                onHover={onHover}
+              />
+            ))}
+          </Baked>
+        </group>
+        <group position={[-cx, 0, -cz]}>
+          <Baked bakeKey={farKey} delay={300}>
+            {items.map(({ plot, owned }) => (
+              <FarYard key={plot.id} plot={plot} owned={owned} />
+            ))}
+          </Baked>
+        </group>
+      </Lod>
     </group>
   )
 })

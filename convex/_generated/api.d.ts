@@ -20,6 +20,7 @@ import type * as giftOrders from "../giftOrders.js";
 import type * as giftOrdersActions from "../giftOrdersActions.js";
 import type * as gifts from "../gifts.js";
 import type * as groups from "../groups.js";
+import type * as homework from "../homework.js";
 import type * as incidents from "../incidents.js";
 import type * as lessonQuiz from "../lessonQuiz.js";
 import type * as lessons from "../lessons.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   giftOrdersActions: typeof giftOrdersActions;
   gifts: typeof gifts;
   groups: typeof groups;
+  homework: typeof homework;
   incidents: typeof incidents;
   lessonQuiz: typeof lessonQuiz;
   lessons: typeof lessons;

@@ -514,6 +514,9 @@ export default defineSchema({
       v.literal('insurance_claim'),
       v.literal('insurance_paid'),
       v.literal('insurance_rejected'),
+      v.literal('homework_new'),
+      v.literal('homework_checked'),
+      v.literal('homework_warning'),
     ),
     title: v.string(),
     body: v.string(),
@@ -578,6 +581,57 @@ export default defineSchema({
   })
     .index('by_test', ['testId'])
     .index('by_group', ['groupId']),
+
+  /** Homework a teacher sets for one lesson (at most one per lesson). Students hand it in from
+   * their own account and AI checks it; the coins become that lesson's "Uy vazifasi" entry.
+   * `criteria` (answer key / what to look for) is shown to the AI and the teacher only. */
+  homeworks: defineTable({
+    groupId: v.id('groups'),
+    lessonId: v.id('lessons'),
+    teacherId: v.id('teachers'),
+    title: v.string(),
+    task: v.string(),
+    criteria: v.optional(v.string()),
+    maxCoins: v.number(),
+    /** ms; hand-ins close at this moment. */
+    dueAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index('by_group', ['groupId'])
+    .index('by_lesson', ['lessonId']),
+
+  /** One student's hand-in for a homework and the AI's verdict on it. `entryId` is the coin
+   * entry it produced (absent while checking, or when it earned nothing). */
+  homeworkSubmissions: defineTable({
+    homeworkId: v.id('homeworks'),
+    studentId: v.id('students'),
+    groupId: v.id('groups'),
+    text: v.optional(v.string()),
+    files: v.array(
+      v.object({ storageId: v.id('_storage'), name: v.string(), contentType: v.string(), sha256: v.string() }),
+    ),
+    status: v.union(v.literal('checking'), v.literal('checked'), v.literal('failed')),
+    attempts: v.number(),
+    /** 0–10 from the AI (or the teacher, after a correction). */
+    score: v.optional(v.number()),
+    /** How likely the AI thinks the work was written by an AI tool. */
+    aiSuspicion: v.optional(v.union(v.literal('low'), v.literal('medium'), v.literal('high'))),
+    aiReason: v.optional(v.string()),
+    feedback: v.optional(v.string()),
+    coins: v.optional(v.number()),
+    /** Coins were cut because the work looked written by AI. */
+    penalized: v.optional(v.boolean()),
+    /** Coins were capped because the lesson already had homework coins from the teacher. */
+    capped: v.optional(v.boolean()),
+    error: v.optional(v.string()),
+    entryId: v.optional(v.id('coinEntries')),
+    teacherEdited: v.optional(v.boolean()),
+    submittedAt: v.number(),
+    checkedAt: v.optional(v.number()),
+  })
+    .index('by_homework', ['homeworkId'])
+    .index('by_student', ['studentId'])
+    .index('by_homework_student', ['homeworkId', 'studentId']),
 
   testAttempts: defineTable({
     studentId: v.id('students'),

@@ -89,6 +89,23 @@ export const ROUTES = {
   TAKE_TEST: '/testlar/:testId/yechish',
   takeTest: (id) => `/testlar/${id}/yechish`,
   LESSON_QUIZ: '/dars-savol-javob',
+  HOMEWORK: '/uy-vazifalari',
+}
+
+/** Homework that students hand in from their own account and AI checks. Coins go into the
+ * lesson's "Uy vazifasi" category, so `MAX_COINS` equals that category's max and one lesson
+ * still can't earn more homework coins than before. */
+export const HOMEWORK = {
+  MAX_COINS: 5,
+  /** Coins kept when the work looks clearly written by AI (the rest is withheld). */
+  AI_PENALTY_KEEP: 0.5,
+  MAX_FILES: 5,
+  MAX_FILE_BYTES: 10 * 1024 * 1024,
+  MAX_TOTAL_BYTES: 15 * 1024 * 1024,
+  MAX_TEXT: 20000,
+  MAX_TASK: 4000,
+  /** Times the server tries a check when Gemini is busy or down, before giving up. */
+  MAX_CHECK_ATTEMPTS: 3,
 }
 
 /** Start-of-lesson Q&A ("darsdagi savol-javob"): each student answers `QUESTION_COUNT`

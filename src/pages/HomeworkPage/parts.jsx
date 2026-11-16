@@ -71,7 +71,8 @@ export function HomeworkHeader({ homework, now }) {
           </p>
         </div>
         <Badge variant="coin">
-          <Coins className="size-3" /> {homework.maxCoins} coingacha
+          <Coins className="size-3" />
+          {homework.mode === 'code' && homework.exercises?.length ? `${homework.exercises.length} ta masala · ${homework.maxCoins} coin` : `${homework.maxCoins} coingacha`}
         </Badge>
       </div>
       {homework.task && <p className="text-sm leading-relaxed whitespace-pre-line text-foreground/90">{homework.task}</p>}

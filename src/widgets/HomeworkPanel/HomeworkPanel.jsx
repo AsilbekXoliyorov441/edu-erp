@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, BookOpenCheck, Bot, ChevronDown, Code2, Coins, FileText, Image, Loader2, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react'
+import { AlertTriangle, BookOpenCheck, Bot, ChevronDown, Code2, Coins, FileText, Image, Loader2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,7 @@ import { EmptyState } from '@/shared/ui/empty-state'
 import { useGroupHomeworks, useHomeworkActions, useHomeworkSubmissions } from '@/entities/homework/model/store'
 import { HOMEWORK, homeworkLanguageFor } from '@/shared/config/constants'
 import { formatUzDayTime } from '@/shared/lib/date'
+import { parseExercises } from '@/shared/lib/homework/parseExercises'
 import { cn } from '@/shared/lib/utils'
 
 /** `datetime-local` value for two days from now at 20:00 — a sensible default deadline. */
@@ -41,7 +42,9 @@ function AssignHomeworkDialog({ group, lessonNumber, disabled }) {
   const [criteria, setCriteria] = useState('')
   const [mode, setMode] = useState('code')
   const [language, setLanguage] = useState(() => homeworkLanguageFor(group.direction))
-  const [exercises, setExercises] = useState(['', ''])
+  // all exercises pasted in one go (e.g. straight from an AI chat), split by their numbers
+  const [bulk, setBulk] = useState('')
+  const parsed = useMemo(() => parseExercises(bulk), [bulk])
   const [maxCoins, setMaxCoins] = useState(HOMEWORK.MAX_COINS)
   const [due, setDue] = useState(defaultDue)
   const [busy, setBusy] = useState(false)
@@ -55,7 +58,8 @@ function AssignHomeworkDialog({ group, lessonNumber, disabled }) {
         task,
         criteria,
         mode,
-        ...(mode === 'code' ? { language, exercises } : {}),
+        ...(mode === 'code' ? { language, exercises: parsed.exercises } : {}),
+        ...(mode === 'code' ? { task: [task.trim(), parsed.intro].filter(Boolean).join('\n\n') } : {}),
         maxCoins,
         dueAt: new Date(due).getTime(),
       })
@@ -64,7 +68,7 @@ function AssignHomeworkDialog({ group, lessonNumber, disabled }) {
       setTitle('')
       setTask('')
       setCriteria('')
-      setExercises(['', ''])
+      setBulk('')
       setDue(defaultDue())
     } catch (err) {
       toast.error(err?.data ?? "Saqlab bo'lmadi")
@@ -133,34 +137,36 @@ function AssignHomeworkDialog({ group, lessonNumber, disabled }) {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="hw-task">Umumiy izoh (ixtiyoriy)</Label>
-                <Textarea id="hw-task" value={task} maxLength={HOMEWORK.MAX_TASK} onChange={(e) => setTask(e.target.value)} className="min-h-[60px]" placeholder="Masalan: input() ishlatmang, natijani print() bilan chiqaring" />
+                <Label htmlFor="hw-bulk">Masalalar — hammasini bitta joyga tashlang</Label>
+                <Textarea
+                  id="hw-bulk"
+                  value={bulk}
+                  onChange={(e) => setBulk(e.target.value)}
+                  className="min-h-[180px] font-mono text-[13px]"
+                  placeholder={"AI bergan savollarni shu yerga qo'ying, masalan:\n\n1. 1 dan 100 gacha sonlar yig'indisini toping\n2. 5 ning karra jadvalini chiqaring\n3. Berilgan son tub yoki yo'qligini aniqlang"}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Raqamlar bo'yicha ajratiladi: «1.», «2)», «3-masala», «Masala 4:». Raqamsiz bo'lsa, har bir xatboshi alohida masala bo'ladi.
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label>Masalalar</Label>
-                {exercises.map((text, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="mt-2 flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-black text-primary">{i + 1}</span>
-                    <Textarea
-                      value={text}
-                      maxLength={HOMEWORK.MAX_TASK}
-                      onChange={(e) => setExercises((list) => list.map((x, j) => (j === i ? e.target.value : x)))}
-                      className="min-h-[60px]"
-                      placeholder={i === 0 ? "Masalan: 1 dan 100 gacha juft sonlar yig'indisini chiqaring" : `${i + 1}-masala`}
-                    />
-                    {exercises.length > 1 && (
-                      <Button type="button" size="icon" variant="ghost" aria-label="Masalani olib tashlash" onClick={() => setExercises((list) => list.filter((_, j) => j !== i))}>
-                        <X className="size-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                {exercises.length < HOMEWORK.MAX_EXERCISES && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setExercises((list) => [...list, ''])}>
-                    <Plus className="size-4" /> Masala qo'shish
-                  </Button>
-                )}
-              </div>
+              {parsed.exercises.length > 0 && (
+                <div className="space-y-1.5 rounded-xl border border-border/70 bg-muted/40 p-3">
+                  {parsed.exercises.length > HOMEWORK.MAX_EXERCISES && (
+                    <p className="text-xs font-bold text-destructive">Ko'pi bilan {HOMEWORK.MAX_EXERCISES} ta masala bo'lishi mumkin</p>
+                  )}
+                  <p className="text-xs font-bold text-foreground">
+                    {parsed.exercises.length} ta masala aniqlandi · har biri ≈ {(maxCoins / parsed.exercises.length).toFixed(1).replace('.0', '')} coin
+                  </p>
+                  {parsed.intro && <p className="text-xs whitespace-pre-line text-muted-foreground">Umumiy izoh: {parsed.intro}</p>}
+                  <ol className="max-h-48 list-decimal space-y-1 overflow-y-auto pl-5 text-xs text-foreground/90">
+                    {parsed.exercises.map((e, i) => (
+                      <li key={i} className="whitespace-pre-line">
+                        {e.length > 220 ? `${e.slice(0, 220)}…` : e}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
             </>
           ) : (
             <div className="space-y-1.5">
@@ -195,7 +201,7 @@ function AssignHomeworkDialog({ group, lessonNumber, disabled }) {
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={save} disabled={busy || !title.trim() || (mode === 'code' ? !exercises.some((e) => e.trim()) : !task.trim())}>
+          <Button onClick={save} disabled={busy || !title.trim() || (mode === 'code' ? parsed.exercises.length === 0 || parsed.exercises.length > HOMEWORK.MAX_EXERCISES : !task.trim())}>
             {busy && <Loader2 className="size-4 animate-spin" />} Berish
           </Button>
         </DialogFooter>

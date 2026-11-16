@@ -629,7 +629,9 @@ export const saveResult = internalMutation({
     // code homework: the average of the exercises
     const raw = exerciseResults?.length ? exerciseResults.reduce((sum, e) => sum + e.score, 0) / exerciseResults.length : result.score
     const score = result.relevant ? Math.max(0, Math.min(10, Math.round(raw))) : 0
-    const full = coinsFor(score, homework.maxCoins)
+    // coins in proportion to the exact average, however many exercises there were
+    // (rounding only once: 2 of 3 right = 6.67/10 → 3 of 5 coins)
+    const full = result.relevant ? coinsFor(raw, homework.maxCoins) : 0
     const penalized = result.aiSuspicion === 'high' && full > 0
     const coins = penalized ? Math.floor(full * HOMEWORK.AI_PENALTY_KEEP) : full
     const { value, entryId, capped } = await writeCoins(ctx, submission, homework, coins)

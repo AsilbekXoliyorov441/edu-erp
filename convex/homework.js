@@ -99,7 +99,17 @@ async function deleteSubmission(ctx, submission, homework) {
 
 /** Student view of a homework: never the teacher's answer key. */
 function publicHomework(h) {
-  return { id: h._id, title: h.title, task: h.task, maxCoins: h.maxCoins, dueAt: h.dueAt, createdAt: h.createdAt }
+  return {
+    id: h._id,
+    title: h.title,
+    task: h.task,
+    mode: h.mode ?? 'files',
+    language: h.language ?? 'text',
+    exercises: (h.exercises ?? []).map((e) => e.text),
+    maxCoins: h.maxCoins,
+    dueAt: h.dueAt,
+    createdAt: h.createdAt,
+  }
 }
 
 function submissionView(s) {
@@ -116,6 +126,8 @@ function submissionView(s) {
     aiSuspicion: s.aiSuspicion ?? null,
     aiReason: s.aiReason ?? null,
     teacherEdited: !!s.teacherEdited,
+    answers: s.answers ?? [],
+    exerciseResults: s.exerciseResults ?? [],
     error: s.error ?? null,
     submittedAt: s.submittedAt,
     checkedAt: s.checkedAt ?? null,
@@ -146,7 +158,8 @@ export const forGroup = query({
           ...publicHomework(h),
           criteria: h.criteria ?? '',
           lessonNumber: lesson?.lessonNumber ?? null,
-          submitted: subs.length,
+          submitted: subs.filter((s) => s.status !== 'draft').length,
+          working: subs.filter((s) => s.status === 'draft').length,
           checking: subs.filter((s) => s.status === 'checking').length,
           failed: subs.filter((s) => s.status === 'failed').length,
           flagged: subs.filter((s) => s.aiSuspicion === 'high').length,
@@ -187,16 +200,27 @@ export const create = mutation({
     title: v.string(),
     task: v.string(),
     criteria: v.optional(v.string()),
+    mode: v.optional(v.union(v.literal('code'), v.literal('files'))),
+    language: v.optional(v.string()),
+    exercises: v.optional(v.array(v.string())),
     maxCoins: v.number(),
     dueAt: v.number(),
   },
-  handler: async (ctx, { token, groupId, lessonId, title, task, criteria, maxCoins, dueAt }) => {
+  handler: async (ctx, { token, groupId, lessonId, title, task, criteria, mode = 'files', language, exercises = [], maxCoins, dueAt }) => {
     const session = await requireGroupOwner(ctx, token, groupId)
     const cleanTitle = title.trim()
     const cleanTask = task.trim()
     const cleanCriteria = criteria?.trim() || undefined
+    const cleanExercises = exercises.map((e) => e.trim()).filter(Boolean)
     if (!cleanTitle) throw new ConvexError('Vazifa nomini yozing')
-    if (!cleanTask) throw new ConvexError('Vazifa matnini yozing')
+    if (mode === 'code') {
+      if (cleanExercises.length === 0) throw new ConvexError("Kamida bitta masala qo'shing")
+      if (cleanExercises.length > HOMEWORK.MAX_EXERCISES) throw new ConvexError(`Ko'pi bilan ${HOMEWORK.MAX_EXERCISES} ta masala`)
+      if (cleanExercises.some((e) => e.length > HOMEWORK.MAX_TASK)) throw new ConvexError('Masala matni juda uzun')
+      if (!HOMEWORK.LANGUAGES.some((l) => l.id === language)) throw new ConvexError('Dasturlash tilini tanlang')
+    } else if (!cleanTask) {
+      throw new ConvexError('Vazifa matnini yozing')
+    }
     if (cleanTitle.length > 120) throw new ConvexError('Nom juda uzun')
     if (cleanTask.length > HOMEWORK.MAX_TASK || (cleanCriteria?.length ?? 0) > HOMEWORK.MAX_TASK) {
       throw new ConvexError(`Matn ${HOMEWORK.MAX_TASK} belgidan oshmasin`)
@@ -231,6 +255,8 @@ export const create = mutation({
       title: cleanTitle,
       task: cleanTask,
       criteria: cleanCriteria,
+      mode,
+      ...(mode === 'code' ? { language, exercises: cleanExercises.map((text) => ({ text })) } : {}),
       maxCoins,
       dueAt,
       createdAt: Date.now(),
@@ -246,7 +272,10 @@ export const create = mutation({
       {
         type: 'homework_new',
         title: `Yangi uy vazifasi: ${cleanTitle}`,
-        body: `${maxCoins} coingacha. AI tekshiradi — o'zingiz bajaring!`,
+        body:
+          mode === 'code'
+            ? `${cleanExercises.length} ta masala, ${maxCoins} coingacha. Muharrirda yozing — AI tekshiradi.`
+            : `${maxCoins} coingacha. AI tekshiradi — o'zingiz bajaring!`,
       },
     )
     return homeworkId
@@ -274,6 +303,7 @@ export const setCoins = mutation({
     const submission = await ctx.db.get(submissionId)
     if (!submission) throw new ConvexError('Topshiriq topilmadi')
     const homework = await requireHomeworkOwner(ctx, token, submission.homeworkId)
+    if (submission.status === 'draft') throw new ConvexError("O'quvchi hali yakunlamagan")
     if (!Number.isInteger(coins) || coins < 0 || coins > homework.maxCoins) {
       throw new ConvexError(`Coin 0 dan ${homework.maxCoins} gacha bo'lsin`)
     }
@@ -305,6 +335,7 @@ export const recheck = mutation({
     if (!submission) throw new ConvexError('Topshiriq topilmadi')
     await requireHomeworkOwner(ctx, token, submission.homeworkId)
     if (submission.status === 'checking') throw new ConvexError('Hozir tekshirilmoqda')
+    if (submission.status === 'draft') throw new ConvexError("O'quvchi hali yakunlamagan")
     await ctx.db.patch(submissionId, { status: 'checking', attempts: 0, error: undefined, teacherEdited: false })
     await ctx.scheduler.runAfter(0, internal.homeworkActions.check, { submissionId })
   },
@@ -312,23 +343,32 @@ export const recheck = mutation({
 
 // ── Student ───────────────────────────────────────────────────────────────────────────
 
-/** Student: their group's latest homework, each with their own hand-in and verdict. */
+/** Student: their group's lessons (latest first), each with its homework — if any — and the
+ * student's own work and verdict on it. */
 export const mine = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const student = await requireStudent(ctx, token)
-    const list = await ctx.db
+    const lessons = await ctx.db
+      .query('lessons')
+      .withIndex('by_group', (q) => q.eq('groupId', student.groupId))
+      .collect()
+    const homeworks = await ctx.db
       .query('homeworks')
       .withIndex('by_group', (q) => q.eq('groupId', student.groupId))
       .order('desc')
       .take(LIST_LIMIT)
+    const byLesson = new Map(homeworks.map((h) => [h.lessonId, h]))
+    const latest = lessons.sort((x, y) => y.lessonNumber - x.lessonNumber).slice(0, 40)
     return await Promise.all(
-      list.map(async (h) => {
+      latest.map(async (l) => {
+        const h = byLesson.get(l._id)
+        if (!h) return { id: l._id, number: l.lessonNumber, date: l.date, homework: null }
         const sub = await ctx.db
           .query('homeworkSubmissions')
           .withIndex('by_homework_student', (q) => q.eq('homeworkId', h._id).eq('studentId', student._id))
           .unique()
-        return { ...publicHomework(h), submission: sub ? submissionView(sub) : null }
+        return { id: l._id, number: l.lessonNumber, date: l.date, homework: { ...publicHomework(h), submission: sub ? submissionView(sub) : null } }
       }),
     )
   },
@@ -352,7 +392,7 @@ export const myOpenCount = query({
         .query('homeworkSubmissions')
         .withIndex('by_homework_student', (q) => q.eq('homeworkId', h._id).eq('studentId', student._id))
         .unique()
-      if (!sub || sub.status === 'failed') count += 1
+      if (!sub || sub.status === 'failed' || sub.status === 'draft') count += 1
     }
     return count
   },
@@ -387,6 +427,7 @@ export const submit = mutation({
 
     const homework = await ctx.db.get(homeworkId)
     if (!homework || homework.groupId !== student.groupId) return await fail('Uy vazifasi topilmadi')
+    if (homework.mode === 'code') return await fail('Bu vazifa kod muharririda bajariladi')
     if (Date.now() > homework.dueAt) return await fail('Topshirish muddati tugagan')
     const existing = await ctx.db
       .query('homeworkSubmissions')
@@ -461,6 +502,86 @@ export const submit = mutation({
   },
 })
 
+/** The student's own code homework, checked: theirs, still open, and not handed in yet. */
+async function openCodeHomework(ctx, student, homeworkId) {
+  const homework = await ctx.db.get(homeworkId)
+  if (!homework || homework.groupId !== student.groupId || homework.mode !== 'code') throw new ConvexError('Uy vazifasi topilmadi')
+  if (Date.now() > homework.dueAt) throw new ConvexError('Topshirish muddati tugagan')
+  const submission = await ctx.db
+    .query('homeworkSubmissions')
+    .withIndex('by_homework_student', (q) => q.eq('homeworkId', homeworkId).eq('studentId', student._id))
+    .unique()
+  if (submission && (submission.status === 'checking' || submission.status === 'checked')) {
+    throw new ConvexError('Bu vazifa allaqachon yuborilgan')
+  }
+  return { homework, submission }
+}
+
+/** Student: saves one exercise's code ("Done", or "Tahrirlash" to reopen it). The work stays a
+ * draft until `finish`. */
+export const saveAnswer = mutation({
+  args: {
+    token: v.string(),
+    homeworkId: v.id('homeworks'),
+    index: v.number(),
+    code: v.string(),
+    done: v.boolean(),
+    typed: v.number(),
+    pasted: v.number(),
+    activeMs: v.number(),
+  },
+  handler: async (ctx, { token, homeworkId, index, code, done, typed, pasted, activeMs }) => {
+    const student = await requireStudent(ctx, token)
+    const { homework, submission } = await openCodeHomework(ctx, student, homeworkId)
+    const count = homework.exercises?.length ?? 0
+    if (!Number.isInteger(index) || index < 0 || index >= count) throw new ConvexError('Masala topilmadi')
+    if (code.length > HOMEWORK.MAX_CODE) throw new ConvexError(`Kod ${HOMEWORK.MAX_CODE} belgidan oshmasin`)
+    if (done && !code.trim()) throw new ConvexError('Avval kodni yozing')
+
+    const blank = { code: '', done: false, typed: 0, pasted: 0, activeMs: 0 }
+    const answers = Array.from({ length: count }, (_, i) => submission?.answers?.[i] ?? blank)
+    const clamp = (n) => Math.max(0, Math.min(10_000_000, Math.round(n) || 0))
+    answers[index] = { code, done, typed: clamp(typed), pasted: clamp(pasted), activeMs: clamp(activeMs) }
+
+    if (submission) {
+      await ctx.db.patch(submission._id, { answers, status: 'draft', error: undefined })
+    } else {
+      await ctx.db.insert('homeworkSubmissions', {
+        homeworkId,
+        studentId: student._id,
+        groupId: student.groupId,
+        files: [],
+        answers,
+        status: 'draft',
+        attempts: 0,
+        submittedAt: Date.now(),
+      })
+    }
+  },
+})
+
+/** Student: hands in the code homework once every exercise is done, and starts the AI check. */
+export const finish = mutation({
+  args: { token: v.string(), homeworkId: v.id('homeworks') },
+  handler: async (ctx, { token, homeworkId }) => {
+    const student = await requireStudent(ctx, token)
+    const { homework, submission } = await openCodeHomework(ctx, student, homeworkId)
+    const count = homework.exercises?.length ?? 0
+    const answers = submission?.answers ?? []
+    if (!submission || answers.length < count || answers.some((a) => !a.done || !a.code.trim())) {
+      throw new ConvexError("Avval hamma masalani bajarib, «Done» ni bosing")
+    }
+    await ctx.db.patch(submission._id, {
+      status: 'checking',
+      attempts: 0,
+      error: undefined,
+      exerciseResults: undefined,
+      submittedAt: Date.now(),
+    })
+    await ctx.scheduler.runAfter(0, internal.homeworkActions.check, { submissionId: submission._id })
+  },
+})
+
 // ── The AI check (called from homeworkActions) ────────────────────────────────────────
 
 /** Everything the checker needs, or null if the hand-in is gone or no longer waiting. */
@@ -479,6 +600,10 @@ export const checkInput = internalQuery({
       direction: group?.direction ?? 'other',
       text: submission.text ?? '',
       files: submission.files.map((f) => ({ storageId: f.storageId, contentType: f.contentType })),
+      mode: homework.mode ?? 'files',
+      language: homework.language ?? 'text',
+      exercises: (homework.exercises ?? []).map((e) => e.text),
+      answers: (submission.answers ?? []).map((a) => ({ code: a.code, typed: a.typed, pasted: a.pasted, activeMs: a.activeMs })),
     }
   },
 })
@@ -494,6 +619,7 @@ export const saveResult = internalMutation({
       feedback: v.string(),
       aiSuspicion: v.union(v.literal('low'), v.literal('medium'), v.literal('high')),
       aiReason: v.string(),
+      exercises: v.optional(v.array(v.object({ score: v.number(), feedback: v.string() }))),
     }),
   },
   handler: async (ctx, { submissionId, result }) => {
@@ -502,7 +628,13 @@ export const saveResult = internalMutation({
     const homework = await ctx.db.get(submission.homeworkId)
     if (!homework) return
 
-    const score = result.relevant ? Math.max(0, Math.min(10, Math.round(result.score))) : 0
+    const exerciseResults = result.exercises?.map((e) => ({
+      score: Math.max(0, Math.min(10, Math.round(e.score))),
+      feedback: e.feedback.slice(0, 1500),
+    }))
+    // code homework: the average of the exercises
+    const raw = exerciseResults?.length ? exerciseResults.reduce((sum, e) => sum + e.score, 0) / exerciseResults.length : result.score
+    const score = result.relevant ? Math.max(0, Math.min(10, Math.round(raw))) : 0
     const full = coinsFor(score, homework.maxCoins)
     const penalized = result.aiSuspicion === 'high' && full > 0
     const coins = penalized ? Math.floor(full * HOMEWORK.AI_PENALTY_KEEP) : full
@@ -514,6 +646,7 @@ export const saveResult = internalMutation({
       feedback: result.feedback.slice(0, 2000),
       aiSuspicion: result.aiSuspicion,
       aiReason: result.aiReason.slice(0, 500) || undefined,
+      exerciseResults,
       coins: value,
       penalized,
       capped,

@@ -11,6 +11,8 @@ import { StudentRosterTable } from '@/widgets/StudentRosterTable/StudentRosterTa
 import { LessonSessionPanel } from '@/widgets/LessonSessionPanel/LessonSessionPanel'
 import { LessonsList } from '@/widgets/LessonsList/LessonsList'
 import { AttendanceHistory } from '@/widgets/AttendanceHistory/AttendanceHistory'
+import { HomeworkPanel } from '@/widgets/HomeworkPanel/HomeworkPanel'
+import { useGroupHomeworks } from '@/entities/homework/model/store'
 import { AddStudentDialog } from '@/features/add-student/ui/AddStudentDialog'
 import { RemovedStudentsList } from '@/features/restore-student/ui/RemovedStudentsList'
 import { EditGroupDialog } from '@/features/edit-group/ui/EditGroupDialog'
@@ -87,6 +89,9 @@ export function GroupDetailPage() {
   const setTrail = useBreadcrumbStore((s) => s.setTrail)
 
   const group = groups.find((g) => g.id === groupId)
+  // a group with AI-checked homework has its "Uy vazifasi" coins given by the AI
+  const homeworks = useGroupHomeworks(group?.id)
+  const aiHomework = (homeworks?.length ?? 0) > 0
   const groupLessons = lessons.filter((l) => l.groupId === group?.id)
   // Based on the highest existing lesson number, not the count — deleting lessons
   // leaves gaps, and count-based numbering would collide with a surviving lesson.
@@ -133,6 +138,7 @@ export function GroupDetailPage() {
         monthIndex={monthIndex}
         date={lessonDate}
         quizId={quizId}
+        aiHomework={aiHomework}
         onDone={closeSession}
         onCancel={closeSession}
       />
@@ -208,6 +214,7 @@ export function GroupDetailPage() {
           <TabsTrigger value="students">O'quvchilar</TabsTrigger>
           <TabsTrigger value="lessons">Darslar</TabsTrigger>
           <TabsTrigger value="attendance">Davomat</TabsTrigger>
+          <TabsTrigger value="homework">Uy vazifalari</TabsTrigger>
           <TabsTrigger value="tests">Testlar</TabsTrigger>
         </TabsList>
         <TabsContent value="students">
@@ -232,6 +239,17 @@ export function GroupDetailPage() {
           <Card>
             <CardContent className="p-5">
               <AttendanceHistory lessons={groupLessons} attendance={attendance} students={groupStudents} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="homework">
+          <Card>
+            <CardContent className="p-5">
+              <HomeworkPanel
+                group={group}
+                students={groupStudents}
+                latestLessonNumber={groupLessons.length ? Math.max(...groupLessons.map((l) => l.lessonNumber)) : null}
+              />
             </CardContent>
           </Card>
         </TabsContent>

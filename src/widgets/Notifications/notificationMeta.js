@@ -1,4 +1,4 @@
-import { Ban, Building2, CheckCircle2, Handshake, KeyRound, ListChecks, PackageCheck, ShieldAlert, ShieldCheck, ShieldX, ShoppingBag, Timer, XCircle } from 'lucide-react'
+import { AlertTriangle, Ban, BookOpenCheck, Bot, Building2, CheckCircle2, Handshake, KeyRound, ListChecks, PackageCheck, ShieldAlert, ShieldCheck, ShieldX, ShoppingBag, Timer, XCircle } from 'lucide-react'
 
 /** Icon + tone per notification type. */
 export const NOTIFICATION_META = {
@@ -17,6 +17,9 @@ export const NOTIFICATION_META = {
   insurance_claim: { icon: ShieldAlert, tone: 'bg-warning/15 text-warning' },
   insurance_paid: { icon: ShieldCheck, tone: 'bg-success/15 text-success' },
   insurance_rejected: { icon: ShieldX, tone: 'bg-destructive/15 text-destructive' },
+  homework_new: { icon: BookOpenCheck, tone: 'bg-primary/10 text-primary' },
+  homework_checked: { icon: Bot, tone: 'bg-success/15 text-success' },
+  homework_warning: { icon: AlertTriangle, tone: 'bg-warning/15 text-warning' },
 }
 
 export function getNotificationMeta(type) {

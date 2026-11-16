@@ -7,8 +7,8 @@ const ATTENDED = new Set(['present', 'late'])
 
 const nullScores = () => Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, null]))
 const QA_CATEGORY = COIN_CATEGORY_LIST.find((c) => c.input === 'cells')
-const PICKED_CATEGORIES = COIN_CATEGORY_LIST.filter((c) => c.input !== 'cells')
-const maxScores = () => Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, c.max]))
+/** In a group with AI-checked homework the AI gives these coins, not the teacher. */
+const AI_CATEGORY = 'uy_vazifasi'
 
 /** Nothing is pre-selected: `null` means "not graded yet", which is different from 0. */
 function emptyDraft(students) {
@@ -23,7 +23,11 @@ function emptyDraft(students) {
 /** Owns the in-progress lesson session draft; `save()` submits it as one atomic Convex
  * mutation that creates the Lesson + every non-zero CoinEntry + Transaction + Attendance
  * record together — the server computes the canonical lesson number/month, not this draft. */
-export function useLessonSession({ group, students, date }) {
+export function useLessonSession({ group, students, date, aiHomework = false }) {
+  // the column the AI fills (null when the teacher grades everything by hand)
+  const locked = aiHomework ? AI_CATEGORY : null
+  const pickedCategories = COIN_CATEGORY_LIST.filter((c) => c.input !== 'cells' && c.key !== locked)
+  const maxScores = () => Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, c.key === locked ? null : c.max]))
   const [draft, setDraft] = useState(() => emptyDraft(students))
   // Last successfully saved draft (or the initial empty one) — what "Bekor qilish" restores.
   const [baseline, setBaseline] = useState(draft)
@@ -52,6 +56,7 @@ export function useLessonSession({ group, students, date }) {
   // can't receive scores at all.
   const setScore = (studentId, categoryKey, value) =>
     update((next) => {
+      if (categoryKey === locked) return next
       if (next.attendance[studentId] === 'absent') return next
       if (!next.attendance[studentId]) next.attendance[studentId] = 'present'
       next.scores[studentId] = { ...next.scores[studentId], [categoryKey]: value }
@@ -95,6 +100,7 @@ export function useLessonSession({ group, students, date }) {
 
   /** Column "Max": only students who attended get this category's max. */
   const fillColumnMax = (categoryKey) => {
+    if (categoryKey === locked) return
     const max = COIN_CATEGORY_LIST.find((c) => c.key === categoryKey).max
     update((next) => {
       students.forEach((s) => {
@@ -163,7 +169,7 @@ export function useLessonSession({ group, students, date }) {
     const status = attendance[studentId]
     if (!status) return true
     if (status === 'absent') return false
-    return PICKED_CATEGORIES.some((c) => (scores[studentId]?.[c.key] ?? null) === null)
+    return pickedCategories.some((c) => (scores[studentId]?.[c.key] ?? null) === null)
   }
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(baseline)
@@ -174,6 +180,7 @@ export function useLessonSession({ group, students, date }) {
     const scoreList = []
     students.forEach((student) => {
       COIN_CATEGORY_LIST.forEach((category) => {
+        if (category.key === locked) return
         const value = snapshot.scores[student.id]?.[category.key] ?? 0
         if (value <= 0) return
         scoreList.push({ studentId: student.id, category: category.key, value })
@@ -196,6 +203,7 @@ export function useLessonSession({ group, students, date }) {
   }
 
   return {
+    locked,
     scores,
     attendance,
     setScore,

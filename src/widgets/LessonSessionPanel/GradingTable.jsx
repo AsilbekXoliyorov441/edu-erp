@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUpToLine, Check, Clock, RotateCcw, Search, Sparkles, UserCheck, X } from 'lucide-react'
+import { ArrowUpToLine, Bot, Check, Clock, RotateCcw, Search, Sparkles, UserCheck, X } from 'lucide-react'
 import { COIN_CATEGORY_LIST } from '@/shared/config/constants'
 import { LESSON_MAX_COINS } from '@/shared/lib/stats/monthlyGoal'
 import { cn } from '@/shared/lib/utils'
@@ -132,7 +132,7 @@ function Toolbar({ query, onQueryChange, filter, onFilterChange, counts, onAllPr
   )
 }
 
-function HeaderRow({ onColumnMax }) {
+function HeaderRow({ onColumnMax, locked }) {
   return (
     <div
       role="row"
@@ -149,9 +149,10 @@ function HeaderRow({ onColumnMax }) {
           <div className="flex flex-col">
             <span className="text-[var(--cs-text-2)]">{category.label}</span>
             <span className="text-[11.5px] font-medium text-[var(--cs-faint)]">
-              {category.input === 'cells' ? `har katak = 1 coin` : `0–${category.max} ball`}
+              {category.key === locked ? 'AI tekshiradi' : category.input === 'cells' ? `har katak = 1 coin` : `0–${category.max} ball`}
             </span>
           </div>
+          {category.key !== locked && (
           <button
             type="button"
             onClick={() => onColumnMax(category.key)}
@@ -162,6 +163,7 @@ function HeaderRow({ onColumnMax }) {
             <ArrowUpToLine size={13} strokeWidth={2.4} aria-hidden="true" />
             Max
           </button>
+          )}
         </div>
       ))}
       <div role="columnheader" className="text-right">
@@ -363,7 +365,14 @@ function StudentRow({ index, student, status, scores, total, ungraded, goalPerce
 
       {COIN_CATEGORY_LIST.map((category) => (
         <div key={category.key} role="cell">
-          {category.input === 'cells' ? (
+          {category.key === session.locked ? (
+            <span
+              title="Bu guruhda uy vazifasini AI tekshiradi — coin o'quvchi topshirganda darhol tushadi. Tuzatish: Uy vazifalari bo'limida."
+              className="inline-flex h-[46px] items-center gap-[6px] rounded-[11px] border border-dashed border-[var(--cs-border-input)] px-[12px] text-[13px] font-semibold text-[var(--cs-muted)]"
+            >
+              <Bot size={16} aria-hidden="true" /> AI qo'yadi
+            </span>
+          ) : category.input === 'cells' ? (
             <ScoreCells
               studentName={name}
               category={category}
@@ -426,7 +435,7 @@ export function GradingTable({ rows, query, onQueryChange, filter, onFilterChang
 
       <div className="overflow-x-auto">
         <div role="table" aria-label="Dars baholash" className="min-w-[1130px]">
-          <HeaderRow onColumnMax={session.fillColumnMax} />
+          <HeaderRow onColumnMax={session.fillColumnMax} locked={session.locked} />
           {rows.length === 0 ? (
             <div role="row">
               <div role="cell" className="px-[16px] py-[40px] text-center text-[14px] text-[var(--cs-muted)]">

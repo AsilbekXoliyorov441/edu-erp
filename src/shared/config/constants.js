@@ -106,6 +106,21 @@ export const HOMEWORK = {
   MAX_TASK: 4000,
   /** Times the server tries a check when Gemini is busy or down, before giving up. */
   MAX_CHECK_ATTEMPTS: 3,
+  MAX_EXERCISES: 15,
+  MAX_CODE: 20000,
+  /** Code editor languages; `directions` picks the default for a group's course. */
+  LANGUAGES: [
+    { id: 'python', label: 'Python', directions: ['python', 'ai'] },
+    { id: 'javascript', label: 'JavaScript', directions: [] },
+    { id: 'html', label: 'HTML', directions: ['frontend'] },
+    { id: 'css', label: 'CSS', directions: [] },
+    { id: 'text', label: 'Oddiy matn', directions: ['cyber', 'other'] },
+  ],
+}
+
+/** Default editor language for a group's course direction. */
+export function homeworkLanguageFor(direction) {
+  return HOMEWORK.LANGUAGES.find((l) => l.directions.includes(direction))?.id ?? 'python'
 }
 
 /** Start-of-lesson Q&A ("darsdagi savol-javob"): each student answers `QUESTION_COUNT`

@@ -25,6 +25,7 @@ import { TestsPage } from '@/pages/TestsPage/TestsPage'
 import { TestDetailPage } from '@/pages/TestDetailPage/TestDetailPage'
 import { TakeTestPage } from '@/pages/TakeTestPage/TakeTestPage'
 import { LessonQuizPage } from '@/pages/LessonQuizPage/LessonQuizPage'
+import { HomeworkPage } from '@/pages/HomeworkPage/HomeworkPage'
 import { GamesPage } from '@/pages/GamesPage/GamesPage'
 import { GamePage } from '@/pages/GamePage/GamePage'
 import { NotFoundPage } from '@/pages/NotFoundPage/NotFoundPage'
@@ -113,6 +114,14 @@ export function AppRouter() {
             element={
               <RequireStudent>
                 <LessonQuizPage />
+              </RequireStudent>
+            }
+          />
+          <Route
+            path="uy-vazifalari"
+            element={
+              <RequireStudent>
+                <HomeworkPage />
               </RequireStudent>
             }
           />

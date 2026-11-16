@@ -592,6 +592,12 @@ export default defineSchema({
     title: v.string(),
     task: v.string(),
     criteria: v.optional(v.string()),
+    /** `code`: numbered exercises answered in the built-in code editor; `files` (or absent, for
+     * the first homework made): one answer as text and/or photos / PDFs. */
+    mode: v.optional(v.union(v.literal('code'), v.literal('files'))),
+    /** Editor language for `code` homework: python | javascript | html | css | text. */
+    language: v.optional(v.string()),
+    exercises: v.optional(v.array(v.object({ text: v.string() }))),
     maxCoins: v.number(),
     /** ms; hand-ins close at this moment. */
     dueAt: v.number(),
@@ -610,7 +616,15 @@ export default defineSchema({
     files: v.array(
       v.object({ storageId: v.id('_storage'), name: v.string(), contentType: v.string(), sha256: v.string() }),
     ),
-    status: v.union(v.literal('checking'), v.literal('checked'), v.literal('failed')),
+    /** `draft`: a code homework still being worked on (exercises saved one by one). */
+    status: v.union(v.literal('draft'), v.literal('checking'), v.literal('checked'), v.literal('failed')),
+    /** Code homework: one answer per exercise. `typed` / `pasted` are characters entered by
+     * typing vs pasting in the editor, `activeMs` the time spent editing — signs of copied work. */
+    answers: v.optional(
+      v.array(v.object({ code: v.string(), done: v.boolean(), typed: v.number(), pasted: v.number(), activeMs: v.number() })),
+    ),
+    /** The AI's score (0–10) and feedback per exercise. */
+    exerciseResults: v.optional(v.array(v.object({ score: v.number(), feedback: v.string() }))),
     attempts: v.number(),
     /** 0–10 from the AI (or the teacher, after a correction). */
     score: v.optional(v.number()),

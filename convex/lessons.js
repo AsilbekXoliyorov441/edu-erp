@@ -4,6 +4,7 @@ import { collectByGroups, collectByStudents, getScopedGroupIdSet, requireGroupOw
 import { COIN_CATEGORY_LIST, LESSONS_PER_MONTH } from '../src/shared/config/constants'
 import { getDayKey } from '../src/shared/lib/stats/monthlyGoal.js'
 import { refreshStudentStats } from './lib/studentStats'
+import { removeHomeworkOfLessons } from './homework'
 
 const CATEGORY_MAX = Object.fromEntries(COIN_CATEGORY_LIST.map((c) => [c.key, c.max]))
 
@@ -118,6 +119,7 @@ export const removeCascade = mutation({
     for (const txn of transactionsToDelete) await ctx.db.delete(txn._id)
     for (const entry of entriesToDelete) await ctx.db.delete(entry._id)
     for (const record of attendanceToDelete) await ctx.db.delete(record._id)
+    await removeHomeworkOfLessons(ctx, ids)
     for (const lessonId of ids) await ctx.db.delete(lessonId)
     await refreshStudentStats(ctx, [...affectedStudentIds])
   },

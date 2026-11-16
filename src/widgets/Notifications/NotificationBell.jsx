@@ -55,6 +55,7 @@ export function NotificationBell() {
   const targetOf = (item) => {
     if (item.orderId) return ROUTES.ORDERS
     if (item.type === 'lesson_quiz') return ROUTES.LESSON_QUIZ
+    if (item.type.startsWith('homework_')) return ROUTES.HOMEWORK
     if (item.type === 'insurance_claim' && isSuperAdmin) return ROUTES.INSURANCE
     if (item.type.startsWith('town_') || item.type.startsWith('insurance_')) return ROUTES.TOWN
     return null

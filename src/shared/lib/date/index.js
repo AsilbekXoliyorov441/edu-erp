@@ -87,3 +87,10 @@ export function formatDayKey(dayKey) {
   const [year, month, day] = dayKey.split('-').map(Number)
   return `${day}-${UZ_MONTHS[month - 1].toLowerCase()} ${year}`
 }
+
+/** ms timestamp → `"17-noyabr, 20:00"` (deadlines). */
+export function formatUzDayTime(ms) {
+  const date = new Date(ms)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getDate()}-${UZ_MONTHS[date.getMonth()].toLowerCase()}, ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}

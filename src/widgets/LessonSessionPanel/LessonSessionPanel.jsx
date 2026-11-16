@@ -176,8 +176,8 @@ function QuizLivePanel({ quiz, students, onClose }) {
   )
 }
 
-export function LessonSessionPanel({ group, students, stats, nextLessonNumber, monthIndex, date, quizId, onDone, onCancel }) {
-  const session = useLessonSession({ group, students, date })
+export function LessonSessionPanel({ group, students, stats, nextLessonNumber, monthIndex, date, quizId, aiHomework = false, onDone, onCancel }) {
+  const session = useLessonSession({ group, students, date, aiHomework })
   const quiz = useLessonQuizResults(quizId)
   const quizActions = useLessonQuizActions()
 

@@ -37,18 +37,12 @@ function coinsFor(score, maxCoins) {
 }
 
 /** Gives the submission `coins` as its lesson's "Uy vazifasi" entry — creating, changing or
- * removing that entry and its transaction. A lesson never gets more homework coins than the
- * category max, counting any the teacher already gave by hand. */
+ * removing that entry and its transaction. Coins the teacher gave by hand in the same lesson
+ * (for the previous, paper homework — the lesson the group switched to AI homework) don't
+ * reduce it: both are real homework. */
 async function writeCoins(ctx, submission, homework, coins) {
-  const lessonEntries = await ctx.db
-    .query('coinEntries')
-    .withIndex('by_lesson', (q) => q.eq('lessonId', homework.lessonId))
-    .collect()
-  const other = lessonEntries
-    .filter((e) => e.studentId === submission.studentId && e.category === CATEGORY && e._id !== submission.entryId)
-    .reduce((sum, e) => sum + e.value, 0)
-  const value = Math.max(0, Math.min(coins, CATEGORY_MAX - other))
-  const capped = value < coins
+  const value = Math.max(0, Math.min(coins, CATEGORY_MAX))
+  const capped = false
 
   const existing = submission.entryId ? await ctx.db.get(submission.entryId) : null
   const linked = existing
@@ -708,3 +702,17 @@ export async function removeHomeworkOfLessons(ctx, lessonIds) {
     }
   }
 }
+
+/** Maintenance: queues every hand-in whose check failed because the AI wasn't set up yet
+ * (run once after setting GEMINI_API_KEY: `npx convex run homework:recheckUnconfigured`). */
+export const recheckUnconfigured = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const failed = (await ctx.db.query('homeworkSubmissions').collect()).filter((s) => s.status === 'failed' && s.error?.includes('ulanmagan'))
+    for (const s of failed) {
+      await ctx.db.patch(s._id, { status: 'checking', attempts: 0, error: undefined })
+      await ctx.scheduler.runAfter(0, internal.homeworkActions.check, { submissionId: s._id })
+    }
+    return failed.length
+  },
+})

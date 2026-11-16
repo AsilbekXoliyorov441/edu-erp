@@ -12,7 +12,9 @@ import { internal } from './_generated/api'
  * work was written by an AI tool. The key lives in the Convex environment (`GEMINI_API_KEY`);
  * `GEMINI_MODEL` can switch the model. Only the work itself is sent — never the student's name. */
 
-const DEFAULT_MODEL = 'gemini-3.8-flash'
+const DEFAULT_MODEL = 'gemini-3.6-flash'
+/** Used when the main model is overloaded or times out (common on the free tier). */
+const FALLBACK_MODEL = 'gemini-3.5-flash-lite'
 
 const DIRECTIONS = {
   frontend: 'frontend web development (HTML, CSS, JavaScript)',
@@ -185,16 +187,26 @@ export const check = internalAction({
       }
       if (!code) parts.push({ text: '</student_work>' })
 
-      const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 120000 } })
-      const response = await ai.models.generateContent({
-        model: process.env.GEMINI_MODEL || DEFAULT_MODEL,
-        contents: [{ role: 'user', parts }],
-        config: {
-          systemInstruction: code ? SYSTEM + CODE_RULES : SYSTEM,
-          responseMimeType: 'application/json',
-          responseJsonSchema: code ? CODE_SCHEMA : SCHEMA,
-        },
-      })
+      const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 90000 } })
+      const ask = (model) =>
+        ai.models.generateContent({
+          model,
+          contents: [{ role: 'user', parts }],
+          config: {
+            systemInstruction: code ? SYSTEM + CODE_RULES : SYSTEM,
+            responseMimeType: 'application/json',
+            responseJsonSchema: code ? CODE_SCHEMA : SCHEMA,
+          },
+        })
+      let response
+      try {
+        response = await ask(process.env.GEMINI_MODEL || DEFAULT_MODEL)
+      } catch (err) {
+        // busy / timed out / unavailable: one more try on the lighter model
+        const status = Number(err?.status)
+        if (!(status === 429 || status >= 500 || !status)) throw err
+        response = await ask(FALLBACK_MODEL)
+      }
       const result = code ? readCodeVerdict(response.text, input.exercises.length) : readVerdict(response.text)
       await ctx.runMutation(internal.homework.saveResult, { submissionId, result })
     } catch (err) {

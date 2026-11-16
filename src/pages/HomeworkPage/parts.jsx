@@ -16,7 +16,11 @@ export function Verdict({ sub, maxCoins }) {
     return (
       <div className="flex items-start gap-3 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
         <XCircle className="mt-0.5 size-4 shrink-0" />
-        <span>Tekshirib bo'lmadi. Qaytadan topshirishingiz mumkin yoki ustozingiz qayta tekshiradi.</span>
+        <span>
+          {sub.error?.includes('ulanmagan')
+            ? "AI tekshiruvchi hali sozlanmagan. Ustozingizga ayting — sozlangach «Yakunlash» ni yana bosing yoki ustoz qayta tekshiradi."
+            : "Tekshirib bo'lmadi. Qaytadan yuborishingiz mumkin yoki ustozingiz qayta tekshiradi."}
+        </span>
       </div>
     )
   }

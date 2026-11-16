@@ -149,10 +149,15 @@ const STATE_STYLE = {
 
 /** The lessons as a scrollable row of chips: which ones have homework, and its state. */
 function LessonPicker({ lessons, selectedId, onSelect, now }) {
+  // lessons without homework only on request — there are dozens of them
+  const [all, setAll] = useState(false)
+  const withHomework = lessons.filter((l) => l.homework)
+  const shown = all || withHomework.length === 0 ? lessons : lessons.filter((l) => l.homework || l.id === selectedId)
+  const hidden = lessons.length - shown.length
   return (
     <div className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
       <div className="flex w-max gap-2">
-        {lessons.map((l) => {
+        {shown.map((l) => {
           const state = homeworkState(l, now)
           const selected = l.id === selectedId
           return (
@@ -175,6 +180,15 @@ function LessonPicker({ lessons, selectedId, onSelect, now }) {
             </button>
           )
         })}
+        {(hidden > 0 || all) && withHomework.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setAll((v) => !v)}
+            className="flex h-14 cursor-pointer items-center rounded-xl border border-dashed border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-accent"
+          >
+            {all ? 'Faqat vazifali darslar' : `Hamma darslar (+${hidden})`}
+          </button>
+        )}
       </div>
     </div>
   )

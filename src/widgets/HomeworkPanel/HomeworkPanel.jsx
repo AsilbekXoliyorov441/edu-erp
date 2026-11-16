@@ -143,10 +143,11 @@ function AssignHomeworkDialog({ group, lessonNumber, disabled }) {
                   value={bulk}
                   onChange={(e) => setBulk(e.target.value)}
                   className="min-h-[180px] font-mono text-[13px]"
-                  placeholder={"AI bergan savollarni shu yerga qo'ying, masalan:\n\n1. 1 dan 100 gacha sonlar yig'indisini toping\n2. 5 ning karra jadvalini chiqaring\n3. Berilgan son tub yoki yo'qligini aniqlang"}
+                  placeholder={"Savollarni javoblari bilan qo'ying, masalan:\n\n1. 1 dan 100 gacha sonlar yig'indisini toping\nJavob: console.log(5050)\n\n2. 5 ning karra jadvalini chiqaring\nJavob: for (let i = 1; i <= 10; i++) console.log(5 * i)"}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Raqamlar bo'yicha ajratiladi: «1.», «2)», «3-masala», «Masala 4:». Raqamsiz bo'lsa, har bir xatboshi alohida masala bo'ladi.
+                  Raqamlar bo'yicha ajratiladi: «1.», «2)», «3-masala», «Masala 4:». Javob har savol tagida «Javob:» / «Yechim:» bilan yoki oxirida «Javoblar:» bo'limida
+                  bo'lishi mumkin — o'quvchi uni faqat ishlab yuborgandan keyin ko'radi. Javobi yo'q masalaga AI o'zi namunaviy yechim yozadi.
                 </p>
               </div>
               {parsed.exercises.length > 0 && (
@@ -155,13 +156,21 @@ function AssignHomeworkDialog({ group, lessonNumber, disabled }) {
                     <p className="text-xs font-bold text-destructive">Ko'pi bilan {HOMEWORK.MAX_EXERCISES} ta masala bo'lishi mumkin</p>
                   )}
                   <p className="text-xs font-bold text-foreground">
-                    {parsed.exercises.length} ta masala aniqlandi · har biri ≈ {(maxCoins / parsed.exercises.length).toFixed(1).replace('.0', '')} coin
+                    {parsed.exercises.length} ta masala aniqlandi
+                    {parsed.exercises.some((e) => e.solution) ? ` · ${parsed.exercises.filter((e) => e.solution).length} tasida javob bor` : ''} · har biri ≈ {(maxCoins / parsed.exercises.length).toFixed(1).replace('.0', '')} coin
                   </p>
                   {parsed.intro && <p className="text-xs whitespace-pre-line text-muted-foreground">Umumiy izoh: {parsed.intro}</p>}
-                  <ol className="max-h-48 list-decimal space-y-1 overflow-y-auto pl-5 text-xs text-foreground/90">
+                  <ol className="max-h-60 list-decimal space-y-1.5 overflow-y-auto pl-5 text-xs text-foreground/90">
                     {parsed.exercises.map((e, i) => (
                       <li key={i} className="whitespace-pre-line">
-                        {e.length > 220 ? `${e.slice(0, 220)}…` : e}
+                        {e.text.length > 220 ? `${e.text.slice(0, 220)}…` : e.text}
+                        {e.solution ? (
+                          <span className="mt-1 block rounded-md bg-success/10 px-2 py-1 font-mono text-[11px] text-success">
+                            Javob: {e.solution.length > 160 ? `${e.solution.slice(0, 160)}…` : e.solution}
+                          </span>
+                        ) : (
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground">javob yo'q — AI namunaviy yechim yozadi</span>
+                        )}
                       </li>
                     ))}
                   </ol>
@@ -400,6 +409,9 @@ function HomeworkItem({ homework, students }) {
                 {homework.exercises.map((e, i) => (
                   <li key={i} className="whitespace-pre-line">
                     {e}
+                    {homework.solutions?.[i] && (
+                      <span className="mt-1 block rounded-md bg-success/10 px-2 py-1 font-mono text-xs whitespace-pre-wrap text-success">Javob: {homework.solutions[i]}</span>
+                    )}
                   </li>
                 ))}
               </ol>

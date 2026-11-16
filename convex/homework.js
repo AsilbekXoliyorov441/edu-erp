@@ -92,7 +92,9 @@ async function deleteSubmission(ctx, submission, homework) {
 }
 
 /** Student view of a homework: never the teacher's answer key. */
-function publicHomework(h) {
+/** Student view of a homework: never the teacher's answer key, and the solutions only once
+ * `reveal` (their work is checked, or the deadline has passed). */
+function publicHomework(h, { reveal = false } = {}) {
   return {
     id: h._id,
     title: h.title,
@@ -100,6 +102,7 @@ function publicHomework(h) {
     mode: h.mode ?? 'files',
     language: h.language ?? 'text',
     exercises: (h.exercises ?? []).map((e) => e.text),
+    solutions: reveal ? (h.exercises ?? []).map((e) => e.solution ?? '') : [],
     maxCoins: h.maxCoins,
     dueAt: h.dueAt,
     createdAt: h.createdAt,
@@ -149,7 +152,7 @@ export const forGroup = query({
           .collect()
         const lesson = await ctx.db.get(h.lessonId)
         return {
-          ...publicHomework(h),
+          ...publicHomework(h, { reveal: true }),
           criteria: h.criteria ?? '',
           lessonNumber: lesson?.lessonNumber ?? null,
           submitted: subs.filter((s) => s.status !== 'draft').length,
@@ -196,7 +199,7 @@ export const create = mutation({
     criteria: v.optional(v.string()),
     mode: v.optional(v.union(v.literal('code'), v.literal('files'))),
     language: v.optional(v.string()),
-    exercises: v.optional(v.array(v.string())),
+    exercises: v.optional(v.array(v.object({ text: v.string(), solution: v.optional(v.string()) }))),
     maxCoins: v.number(),
     dueAt: v.number(),
   },
@@ -205,12 +208,15 @@ export const create = mutation({
     const cleanTitle = title.trim()
     const cleanTask = task.trim()
     const cleanCriteria = criteria?.trim() || undefined
-    const cleanExercises = exercises.map((e) => e.trim()).filter(Boolean)
+    const cleanExercises = exercises
+      .map((e) => ({ text: e.text.trim(), solution: e.solution?.trim() || undefined }))
+      .filter((e) => e.text)
     if (!cleanTitle) throw new ConvexError('Vazifa nomini yozing')
     if (mode === 'code') {
       if (cleanExercises.length === 0) throw new ConvexError("Kamida bitta masala qo'shing")
       if (cleanExercises.length > HOMEWORK.MAX_EXERCISES) throw new ConvexError(`Ko'pi bilan ${HOMEWORK.MAX_EXERCISES} ta masala`)
-      if (cleanExercises.some((e) => e.length > HOMEWORK.MAX_TASK)) throw new ConvexError('Masala matni juda uzun')
+      if (cleanExercises.some((e) => e.text.length > HOMEWORK.MAX_TASK)) throw new ConvexError('Masala matni juda uzun')
+      if (cleanExercises.some((e) => (e.solution?.length ?? 0) > HOMEWORK.MAX_CODE)) throw new ConvexError('Yechim juda uzun')
       if (!HOMEWORK.LANGUAGES.some((l) => l.id === language)) throw new ConvexError('Dasturlash tilini tanlang')
     } else if (!cleanTask) {
       throw new ConvexError('Vazifa matnini yozing')
@@ -250,7 +256,7 @@ export const create = mutation({
       task: cleanTask,
       criteria: cleanCriteria,
       mode,
-      ...(mode === 'code' ? { language, exercises: cleanExercises.map((text) => ({ text })) } : {}),
+      ...(mode === 'code' ? { language, exercises: cleanExercises } : {}),
       maxCoins,
       dueAt,
       createdAt: Date.now(),
@@ -362,7 +368,8 @@ export const mine = query({
           .query('homeworkSubmissions')
           .withIndex('by_homework_student', (q) => q.eq('homeworkId', h._id).eq('studentId', student._id))
           .unique()
-        return { id: l._id, number: l.lessonNumber, date: l.date, homework: { ...publicHomework(h), submission: sub ? submissionView(sub) : null } }
+        const reveal = sub?.status === 'checked' || Date.now() > h.dueAt
+        return { id: l._id, number: l.lessonNumber, date: l.date, homework: { ...publicHomework(h, { reveal }), submission: sub ? submissionView(sub) : null } }
       }),
     )
   },
@@ -597,6 +604,7 @@ export const checkInput = internalQuery({
       mode: homework.mode ?? 'files',
       language: homework.language ?? 'text',
       exercises: (homework.exercises ?? []).map((e) => e.text),
+      solutions: (homework.exercises ?? []).map((e) => e.solution ?? ''),
       answers: (submission.answers ?? []).map((a) => ({ code: a.code, typed: a.typed, pasted: a.pasted, activeMs: a.activeMs })),
     }
   },
@@ -613,7 +621,7 @@ export const saveResult = internalMutation({
       feedback: v.string(),
       aiSuspicion: v.union(v.literal('low'), v.literal('medium'), v.literal('high')),
       aiReason: v.string(),
-      exercises: v.optional(v.array(v.object({ score: v.number(), feedback: v.string() }))),
+      exercises: v.optional(v.array(v.object({ score: v.number(), feedback: v.string(), solution: v.optional(v.string()) }))),
     }),
   },
   handler: async (ctx, { submissionId, result }) => {
@@ -625,6 +633,7 @@ export const saveResult = internalMutation({
     const exerciseResults = result.exercises?.map((e) => ({
       score: Math.max(0, Math.min(10, Math.round(e.score))),
       feedback: e.feedback.slice(0, 1500),
+      ...(e.solution ? { solution: e.solution.slice(0, HOMEWORK.MAX_CODE) } : {}),
     }))
     // code homework: the average of the exercises
     const raw = exerciseResults?.length ? exerciseResults.reduce((sum, e) => sum + e.score, 0) / exerciseResults.length : result.score

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Bot, Check, CheckCircle2, Loader2, Pencil, Send } from 'lucide-react'
+import { Bot, Check, CheckCircle2, Lightbulb, Loader2, Pencil, Send } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
@@ -32,6 +32,15 @@ function writeDraft(homeworkId, index, draft) {
   }
 }
 
+/** A solution as plain code: markdown code fences dropped. */
+function solutionCode(text) {
+  return text
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('```'))
+    .join('\n')
+    .trim()
+}
+
 function scoreTone(score) {
   if (score >= 8) return 'success'
   if (score >= 5) return 'warning'
@@ -40,7 +49,7 @@ function scoreTone(score) {
 
 /** One exercise: its text, the editor, and "Done" / "Tahrirlash". After the check, the AI's
  * score and feedback for this exercise appear under it. */
-function Exercise({ homework, index, text, answer, result, locked }) {
+function Exercise({ homework, index, text, answer, result, solution, locked }) {
   const { saveAnswer } = useHomeworkActions()
   const [busy, setBusy] = useState(false)
   // where the editor starts: the saved answer, or this browser's unsaved draft
@@ -113,6 +122,17 @@ function Exercise({ homework, index, text, answer, result, locked }) {
         </div>
       )}
 
+      {solution && (
+        <div className="space-y-1.5">
+          <p className="flex items-center gap-1.5 text-xs font-bold text-success">
+            <Lightbulb className="size-3.5" /> {homework.solutions?.[index] ? 'Ustoz yechimi' : 'Namunaviy yechim (AI)'}
+          </p>
+          <pre className="overflow-x-auto rounded-xl border border-success/30 bg-[#282c34] p-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-[#abb2bf]">
+            {solutionCode(solution)}
+          </pre>
+        </div>
+      )}
+
       {!locked && (
         <div className="flex justify-end">
           {done ? (
@@ -179,6 +199,7 @@ export function CodeHomework({ homework, now }) {
           text={text}
           answer={answers[i]}
           result={sub?.status === 'checked' ? sub.exerciseResults?.[i] : null}
+          solution={homework.solutions?.[i] || (sub?.status === 'checked' ? sub.exerciseResults?.[i]?.solution : '') || ''}
           locked={locked}
         />
       ))}

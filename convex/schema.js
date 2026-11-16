@@ -597,7 +597,8 @@ export default defineSchema({
     mode: v.optional(v.union(v.literal('code'), v.literal('files'))),
     /** Editor language for `code` homework: python | javascript | html | css | text. */
     language: v.optional(v.string()),
-    exercises: v.optional(v.array(v.object({ text: v.string() }))),
+    /** `solution`: the teacher's answer, shown to a student only after their work is checked. */
+    exercises: v.optional(v.array(v.object({ text: v.string(), solution: v.optional(v.string()) }))),
     maxCoins: v.number(),
     /** ms; hand-ins close at this moment. */
     dueAt: v.number(),
@@ -624,7 +625,8 @@ export default defineSchema({
       v.array(v.object({ code: v.string(), done: v.boolean(), typed: v.number(), pasted: v.number(), activeMs: v.number() })),
     ),
     /** The AI's score (0–10) and feedback per exercise. */
-    exerciseResults: v.optional(v.array(v.object({ score: v.number(), feedback: v.string() }))),
+    /** `solution`: the AI's model answer, for exercises the teacher gave no solution for. */
+    exerciseResults: v.optional(v.array(v.object({ score: v.number(), feedback: v.string(), solution: v.optional(v.string()) }))),
     attempts: v.number(),
     /** 0–10 from the AI (or the teacher, after a correction). */
     score: v.optional(v.number()),

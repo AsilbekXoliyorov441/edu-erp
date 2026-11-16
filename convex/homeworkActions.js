@@ -57,6 +57,8 @@ const CODE_RULES = `
 This homework has numbered exercises; the student wrote each answer in the platform's code editor.
 - Grade every exercise on its own (0–10) with its own feedback (Uzbek, 1–3 sentences, no markdown). Mentally run the code: does it do what the exercise asks? Syntax errors and wrong output cost the most. Do not rewrite the whole solution for them — point to the mistake and hint at the fix.
 - "feedback" is the overall comment on the whole homework (1–3 sentences).
+- <reference_solution> is the teacher's answer: one correct way. Accept any other correct solution too.
+- "solution" per exercise: when no <reference_solution> was given for it, write a short, clean, correct model solution in the exercise's language at a beginner's level (it is shown to the student after grading). When a reference solution was given, return an empty string.
 - For each answer you also get typing statistics from the editor: "typed" and "pasted" are characters entered by typing vs pasting, "minutes" is the time spent editing. Most of a non-trivial answer arriving by paste, or long code written in a minute or two, is a strong sign it was copied (e.g. from ChatGPT) — weigh it together with how the code looks. A small paste (a few characters, or the exercise's own example) means nothing.`
 
 const CODE_SCHEMA = {
@@ -70,8 +72,9 @@ const CODE_SCHEMA = {
         properties: {
           score: { type: 'integer', minimum: 0, maximum: 10 },
           feedback: { type: 'string', description: 'Uzbek (Latin), 1-3 sentences.' },
+          solution: { type: 'string', description: 'Model solution code if no reference solution was given, else empty.' },
         },
-        required: ['score', 'feedback'],
+        required: ['score', 'feedback', 'solution'],
       },
     },
     feedback: { type: 'string', description: 'Uzbek (Latin), overall, 1-3 sentences.' },
@@ -90,8 +93,11 @@ function codeParts(input) {
     const minutes = Math.round((a.activeMs / 60000) * 10) / 10
     return [
       `<exercise number="${i + 1}">\n${text}\n</exercise>`,
+      input.solutions[i] ? `<reference_solution number="${i + 1}">\n${input.solutions[i]}\n</reference_solution>` : '',
       `<answer number="${i + 1}" language="${lang}" typed="${a.typed}" pasted="${a.pasted}" minutes="${minutes}">\n${a.code}\n</answer>`,
-    ].join('\n')
+    ]
+      .filter(Boolean)
+      .join('\n')
   })
   return [
     {
@@ -111,7 +117,8 @@ function codeParts(input) {
 }
 
 /** Code homework verdict: per-exercise scores (padded / trimmed to the exercise count). */
-function readCodeVerdict(raw, count) {
+function readCodeVerdict(raw, input) {
+  const count = input.exercises.length
   const data = JSON.parse(raw ?? '')
   if (!Array.isArray(data.exercises) || typeof data.feedback !== 'string') throw new Error('AI javobi tushunarsiz')
   const exercises = Array.from({ length: count }, (_, i) => {
@@ -120,6 +127,8 @@ function readCodeVerdict(raw, count) {
     return {
       score: Number.isFinite(score) ? Math.max(0, Math.min(10, Math.round(score))) : 0,
       feedback: typeof e.feedback === 'string' && e.feedback.trim() ? e.feedback.trim() : 'Baholab bo\'lmadi.',
+      // the teacher's solution wins; the AI's is kept only where there is none
+      ...(!input.solutions[i] && typeof e.solution === 'string' && e.solution.trim() ? { solution: e.solution.trim() } : {}),
     }
   })
   return {
@@ -207,7 +216,7 @@ export const check = internalAction({
         if (!(status === 429 || status >= 500 || !status)) throw err
         response = await ask(FALLBACK_MODEL)
       }
-      const result = code ? readCodeVerdict(response.text, input.exercises.length) : readVerdict(response.text)
+      const result = code ? readCodeVerdict(response.text, input) : readVerdict(response.text)
       await ctx.runMutation(internal.homework.saveResult, { submissionId, result })
     } catch (err) {
       const status = Number(err?.status)

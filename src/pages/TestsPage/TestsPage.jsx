@@ -385,7 +385,7 @@ function TeacherTestsPage() {
         <EmptyState
           icon={ListChecks}
           title="Hali mavzu yo'q"
-          description="Birinchi mavzuingizni yarating yoki “Tayyor testlar” orqali HTML, CSS, Python testlarini qo'shing."
+          description="Birinchi mavzuingizni yarating yoki “Tayyor testlar” orqali HTML, CSS, JavaScript va Python testlarini qo'shing."
         />
       </div>
     )

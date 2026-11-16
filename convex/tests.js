@@ -76,36 +76,40 @@ export const create = mutation({
   },
 })
 
-/** Copies the ready-made HTML / CSS / HTML+CSS topics into the caller's question bank.
- * Topics the caller already has (matched by title) are skipped, so it's safe to re-run. */
+/** Copies the course bank (HTML, CSS, JavaScript, Python — one topic per lesson) into a
+ * teacher's question bank. Topics they already have (matched by title) are skipped. */
+async function addPresetTopics(ctx, teacherId) {
+  const existing = await ctx.db
+    .query('tests')
+    .withIndex('by_teacher', (q) => q.eq('teacherId', teacherId))
+    .collect()
+  const existingTitles = new Set(existing.map((t) => t.title))
+
+  let added = 0
+  for (const preset of PRESET_TESTS) {
+    if (existingTitles.has(preset.title)) continue
+    const testId = await ctx.db.insert('tests', {
+      title: preset.title,
+      subject: preset.subject,
+      section: preset.section,
+      createdAt: new Date().toISOString(),
+      teacherId,
+    })
+    for (const [index, question] of preset.questions.entries()) {
+      await ctx.db.insert('testQuestions', { testId, ...question, order: index + 1 })
+    }
+    added += 1
+  }
+  return added
+}
+
+/** Imports the course bank into the caller's own topics — safe to re-run. */
 export const importPresets = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const scope = await getScope(ctx, token)
     requireTeacherScope(scope)
-    const teacherId = scope.session.userId
-
-    const existing = await ctx.db
-      .query('tests')
-      .withIndex('by_teacher', (q) => q.eq('teacherId', teacherId))
-      .collect()
-    const existingTitles = new Set(existing.map((t) => t.title))
-
-    let added = 0
-    for (const preset of PRESET_TESTS) {
-      if (existingTitles.has(preset.title)) continue
-      const testId = await ctx.db.insert('tests', {
-        title: preset.title,
-        subject: preset.subject,
-        createdAt: new Date().toISOString(),
-        teacherId,
-      })
-      for (const [index, question] of preset.questions.entries()) {
-        await ctx.db.insert('testQuestions', { testId, ...question, order: index + 1 })
-      }
-      added += 1
-    }
-    return { added }
+    return { added: await addPresetTopics(ctx, scope.session.userId) }
   },
 })
 

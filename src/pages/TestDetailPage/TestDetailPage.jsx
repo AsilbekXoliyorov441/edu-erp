@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, ListChecks, Plus, Code2, ClipboardList, Users2, ImageIcon } from 'lucide-react'
+import { ArrowLeft, ListChecks, Plus, Code2, ClipboardList, Users2, ImageIcon, Lock } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/card'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
@@ -38,6 +38,11 @@ function QuestionRow({ testId, question, index }) {
           {question.imageUrl && (
             <Badge variant="secondary" className="gap-1">
               <ImageIcon className="size-3" /> Rasm
+            </Badge>
+          )}
+          {question.examOnly && (
+            <Badge variant="warning" className="gap-1" title="Mahallada va mustaqil testda chiqmaydi">
+              <Lock className="size-3" /> Faqat darsda
             </Badge>
           )}
         </p>

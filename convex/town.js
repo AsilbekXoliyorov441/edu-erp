@@ -4,6 +4,7 @@ import { getScope } from './lib/scoping'
 import { internal } from './_generated/api'
 import { notify, getOrderHandlerIds } from './lib/notify'
 import { PRESET_TESTS } from './lib/presetTests'
+import { shuffledOptions, shownIndex, storedIndex } from './lib/optionOrder'
 import { DIRECTION_LABEL, groupDirection, lessonNumberOf, subjectOf, topicFitsLevel } from './lib/learningLevel'
 import {
   CAR_COLORS,
@@ -499,7 +500,8 @@ async function buildTopics(ctx, token) {
       .query('testQuestions')
       .withIndex('by_test', (q) => q.eq('testId', test._id))
       .collect()
-    const refs = qs.filter((q) => q.options.length === 4).map((q) => `q:${q._id}`)
+    // class-only questions stay out of the town (see `testQuestions.examOnly`)
+    const refs = qs.filter((q) => q.options.length === 4 && !q.examOnly).map((q) => `q:${q._id}`)
     if (refs.length) {
       topics.push({ key: `t:${test._id}`, title: test.title, subject: subjectOf(test), lesson: lessonNumberOf(test.title), source, order, refs })
     }
@@ -518,7 +520,7 @@ async function buildTopics(ctx, token) {
         ...info,
         source: 'preset',
         order: 1000 + ti,
-        refs: preset.questions.map((_, qi) => `p:${ti}:${qi}`),
+        refs: preset.questions.flatMap((pq, qi) => (pq.examOnly ? [] : [`p:${ti}:${qi}`])),
       })
     })
   }
@@ -749,7 +751,9 @@ export const quizState = query({
       streak: quiz.streak,
       earned: quiz.earned,
       isNew: !(learned?.correctCount > 0),
-      question: q ? { text: q.text, isCode: q.isCode, options: q.options, imageUrl: q.imageUrl, topic: q.topic } : null,
+      question: q
+        ? { text: q.text, isCode: q.isCode, options: shuffledOptions(q.options, `${quiz._id}:${quiz.index}`), imageUrl: q.imageUrl, topic: q.topic }
+        : null,
     }
   },
 })
@@ -766,7 +770,9 @@ export const quizAnswer = mutation({
 
     const ref = quiz.refs[index]
     const q = await loadQuestion(ctx, ref)
-    const correct = !!q && selectedIndex === q.correctIndex
+    // options were shown shuffled for this session — map the pick back to the stored order
+    const seed = `${quiz._id}:${index}`
+    const correct = !!q && storedIndex(selectedIndex, seed, q.options.length) === q.correctIndex
     const learnedRow = await ctx.db
       .query('townLearned')
       .withIndex('by_player', (x) => x.eq('playerId', me._id).eq('ref', ref))
@@ -865,7 +871,7 @@ export const quizAnswer = mutation({
 
     return {
       correct,
-      correctIndex: q?.correctIndex ?? null,
+      correctIndex: q ? shownIndex(q.correctIndex, seed, q.options.length) : null,
       reward,
       streak,
       status,

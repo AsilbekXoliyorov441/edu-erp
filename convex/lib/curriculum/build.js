@@ -14,11 +14,23 @@ function hash(text) {
   return h
 }
 
-function build(item) {
+function build(item, index) {
   const at = hash(item.text) % 4
   const options = [...item.wrong]
   options.splice(at, 0, item.right)
-  return { text: item.text, options, correctIndex: at, ...(item.isCode ? { isCode: true } : {}) }
+  return {
+    text: item.text,
+    options,
+    correctIndex: at,
+    ...(item.isCode ? { isCode: true } : {}),
+    ...(isExamOnly(index) ? { examOnly: true } : {}),
+  }
+}
+
+/** Every third question (3rd, 6th, 9th…) is kept for class only — about a third of each
+ * lesson, spread from easy to hard. */
+export function isExamOnly(index) {
+  return index % 3 === 2
 }
 
 /** One lesson's test: "5-dars. Ro'yxatlar" (or "JS 5-mavzu. …" — see `javascript.js`). */

@@ -34,6 +34,7 @@ import type * as lib_curriculum_javascript from "../lib/curriculum/javascript.js
 import type * as lib_curriculum_python from "../lib/curriculum/python.js";
 import type * as lib_learningLevel from "../lib/learningLevel.js";
 import type * as lib_notify from "../lib/notify.js";
+import type * as lib_optionOrder from "../lib/optionOrder.js";
 import type * as lib_passwordVault from "../lib/passwordVault.js";
 import type * as lib_passwords from "../lib/passwords.js";
 import type * as lib_presetTests from "../lib/presetTests.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   "lib/curriculum/python": typeof lib_curriculum_python;
   "lib/learningLevel": typeof lib_learningLevel;
   "lib/notify": typeof lib_notify;
+  "lib/optionOrder": typeof lib_optionOrder;
   "lib/passwordVault": typeof lib_passwordVault;
   "lib/passwords": typeof lib_passwords;
   "lib/presetTests": typeof lib_presetTests;

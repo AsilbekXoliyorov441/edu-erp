@@ -51,8 +51,9 @@ export const create = mutation({
     imageStorageId: v.optional(v.id('_storage')),
     options: v.array(v.string()),
     correctIndex: v.number(),
+    examOnly: v.optional(v.boolean()),
   },
-  handler: async (ctx, { token, testId, text, isCode, imageStorageId, options, correctIndex }) => {
+  handler: async (ctx, { token, testId, text, isCode, imageStorageId, options, correctIndex, examOnly }) => {
     await requireTestOwner(ctx, token, testId)
     validateOptions(options, correctIndex)
 
@@ -62,7 +63,16 @@ export const create = mutation({
       .collect()
     const order = existing.length ? Math.max(...existing.map((q) => q.order)) + 1 : 1
 
-    return await ctx.db.insert('testQuestions', { testId, text, isCode, imageStorageId, options, correctIndex, order })
+    return await ctx.db.insert('testQuestions', {
+      testId,
+      text,
+      isCode,
+      imageStorageId,
+      options,
+      correctIndex,
+      order,
+      ...(examOnly ? { examOnly: true } : {}),
+    })
   },
 })
 
@@ -75,14 +85,15 @@ export const update = mutation({
     imageStorageId: v.optional(v.id('_storage')),
     options: v.array(v.string()),
     correctIndex: v.number(),
+    examOnly: v.optional(v.boolean()),
   },
-  handler: async (ctx, { token, id, text, isCode, imageStorageId, options, correctIndex }) => {
+  handler: async (ctx, { token, id, text, isCode, imageStorageId, options, correctIndex, examOnly }) => {
     const { question } = await requireQuestionOwner(ctx, token, id)
     validateOptions(options, correctIndex)
     if (question.imageStorageId && question.imageStorageId !== imageStorageId) {
       await ctx.storage.delete(question.imageStorageId)
     }
-    await ctx.db.patch(id, { text, isCode, imageStorageId, options, correctIndex })
+    await ctx.db.patch(id, { text, isCode, imageStorageId, options, correctIndex, examOnly: examOnly || undefined })
   },
 })
 

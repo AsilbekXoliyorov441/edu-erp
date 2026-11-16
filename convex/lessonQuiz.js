@@ -3,6 +3,7 @@ import { internal } from './_generated/api'
 import { v, ConvexError } from 'convex/values'
 import { getScope, requireGroupOwner, requireTestOwner } from './lib/scoping'
 import { notify } from './lib/notify'
+import { shuffledOptions, storedIndex } from './lib/optionOrder'
 import { LESSON_QUIZ, STUDENT_STATUS } from '../src/shared/config/constants'
 
 const QUESTION_MS = LESSON_QUIZ.SECONDS_PER_QUESTION * 1000
@@ -14,6 +15,30 @@ function shuffle(list) {
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
+}
+
+/** A student's own questions: class-only ones first (never seen in the town or a
+ * self-test), then ones they haven't answered in the town, then the rest — each group in
+ * random order. Answers learned by heart while playing don't carry over to the grade. */
+async function pickQuestions(ctx, questionIds, studentId) {
+  const player = await ctx.db
+    .query('townPlayers')
+    .withIndex('by_user', (q) => q.eq('userId', studentId))
+    .unique()
+  const seen = new Set()
+  if (player) {
+    const rows = await ctx.db
+      .query('townLearned')
+      .withIndex('by_player', (q) => q.eq('playerId', player._id))
+      .collect()
+    rows.forEach((r) => seen.add(r.ref))
+  }
+  const questions = (await Promise.all(questionIds.map((id) => ctx.db.get(id)))).filter(Boolean)
+  const tier = (q) => (q.examOnly ? 0 : seen.has(`q:${q._id}`) ? 2 : 1)
+  return shuffle(questions)
+    .sort((a, b) => tier(a) - tier(b))
+    .slice(0, LESSON_QUIZ.QUESTION_COUNT)
+    .map((q) => q._id)
 }
 
 function isOpen(quiz) {
@@ -215,7 +240,7 @@ export const getMine = query({
           text: q.text,
           isCode: !!q.isCode,
           imageUrl: q.imageStorageId ? await ctx.storage.getUrl(q.imageStorageId) : null,
-          options: q.options,
+          options: shuffledOptions(q.options, `${attempt._id}:${attempt.index}`),
         }
       }
     }
@@ -250,7 +275,7 @@ export const start = mutation({
     const attemptId = await ctx.db.insert('lessonQuizAttempts', {
       quizId,
       studentId: student._id,
-      questionIds: shuffle(quiz.questionIds).slice(0, LESSON_QUIZ.QUESTION_COUNT),
+      questionIds: await pickQuestions(ctx, quiz.questionIds, student._id),
       index: 0,
       questionStartedAt: now + LESSON_QUIZ.LEAD_IN_MS,
       answers: [],
@@ -285,8 +310,10 @@ export const answer = mutation({
     if (elapsed < -LESSON_QUIZ.GRACE_MS) return { stale: true }
     const inTime = elapsed <= QUESTION_MS + LESSON_QUIZ.GRACE_MS
     const question = await ctx.db.get(attempt.questionIds[index])
-    const correct = inTime && selectedIndex >= 0 && question?.correctIndex === selectedIndex
-    return await recordAnswer(ctx, attempt, inTime ? selectedIndex : -1, correct)
+    // the options were shown shuffled — map the pick back to the stored order
+    const picked = question ? storedIndex(selectedIndex, `${attempt._id}:${index}`, question.options.length) : -1
+    const correct = inTime && picked >= 0 && question?.correctIndex === picked
+    return await recordAnswer(ctx, attempt, inTime ? picked : -1, correct)
   },
 })
 

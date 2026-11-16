@@ -570,6 +570,9 @@ export default defineSchema({
     options: v.array(v.string()),
     correctIndex: v.number(),
     order: v.number(),
+    /** Asked only in class (lesson Q&A, live game) — never in the town or a self-test, so
+     * answers learned by heart while practising can't carry over to the graded Q&A. */
+    examOnly: v.optional(v.boolean()),
   }).index('by_test', ['testId']),
 
   /** Links a reusable test (topic) to a group whose students may take it — many-to-many,

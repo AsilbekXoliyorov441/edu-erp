@@ -3,20 +3,23 @@ import { v, ConvexError } from 'convex/values'
 import { requireSession } from './lib/authz'
 import { requireTestAccess, requireTestOwner } from './lib/scoping'
 
-async function getTestQuestions(ctx, testId) {
+/** A topic's questions in order. A student never gets the class-only ones (`examOnly`) —
+ * those are kept for the graded lesson Q&A. */
+async function getTestQuestions(ctx, testId, scope) {
   const questions = await ctx.db
     .query('testQuestions')
     .withIndex('by_test', (q) => q.eq('testId', testId))
     .collect()
-  return questions.sort((a, b) => a.order - b.order)
+  const forStudent = scope?.session.role === 'student'
+  return questions.filter((q) => !(forStudent && q.examOnly)).sort((a, b) => a.order - b.order)
 }
 
 /** One topic's quiz — `correctIndex` is never included in this response. */
 export const getQuizForTest = query({
   args: { token: v.string(), testId: v.id('tests') },
   handler: async (ctx, { token, testId }) => {
-    const { test } = await requireTestAccess(ctx, token, testId)
-    const questions = await getTestQuestions(ctx, testId)
+    const { test, scope } = await requireTestAccess(ctx, token, testId)
+    const questions = await getTestQuestions(ctx, testId, scope)
     return {
       testId,
       title: test.title,
@@ -42,7 +45,8 @@ export const checkAnswer = query({
   handler: async (ctx, { token, questionId, selectedIndex }) => {
     const question = await ctx.db.get(questionId)
     if (!question) throw new ConvexError('Savol topilmadi')
-    await requireTestAccess(ctx, token, question.testId)
+    const { scope } = await requireTestAccess(ctx, token, question.testId)
+    if (question.examOnly && scope.session.role === 'student') throw new ConvexError('Savol topilmadi')
     return { correct: selectedIndex === question.correctIndex, correctIndex: question.correctIndex }
   },
 })
@@ -60,7 +64,7 @@ export const submitAttempt = mutation({
     const { scope } = await requireTestAccess(ctx, token, testId)
     if (scope.session.role !== 'student') throw new ConvexError("Faqat o'quvchi test topshira oladi")
 
-    const questions = await getTestQuestions(ctx, testId)
+    const questions = await getTestQuestions(ctx, testId, scope)
     const correctByQuestion = new Map(questions.map((q) => [q._id, q.correctIndex]))
 
     let score = 0

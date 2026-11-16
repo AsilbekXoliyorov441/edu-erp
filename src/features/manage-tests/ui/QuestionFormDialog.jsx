@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { CheckCircle2, Circle, Code2, ImagePlus, Loader2, X } from 'lucide-react'
+import { CheckCircle2, Circle, Code2, ImagePlus, Loader2, Lock, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
@@ -19,6 +19,7 @@ function QuestionFormBody({ testId, question, onDone }) {
   const isEdit = Boolean(question)
   const [text, setText] = useState(question?.text ?? '')
   const [isCode, setIsCode] = useState(question?.isCode ?? false)
+  const [examOnly, setExamOnly] = useState(question?.examOnly ?? false)
   const [options, setOptions] = useState(question?.options ?? ['', '', '', ''])
   const [correctIndex, setCorrectIndex] = useState(question?.correctIndex ?? 0)
   const [imageStorageId, setImageStorageId] = useState(question?.imageStorageId ?? undefined)
@@ -77,7 +78,7 @@ function QuestionFormBody({ testId, question, onDone }) {
       setUploading(false)
     }
 
-    const payload = { text: trimmedText, isCode, imageStorageId: finalImageStorageId, options: trimmedOptions, correctIndex }
+    const payload = { text: trimmedText, isCode, imageStorageId: finalImageStorageId, options: trimmedOptions, correctIndex, examOnly }
     if (isEdit) {
       await update(question.id, payload)
       toast.success('Savol yangilandi')
@@ -161,6 +162,21 @@ function QuestionFormBody({ testId, question, onDone }) {
             </div>
           ))}
         </div>
+
+        <Label
+          htmlFor="question-exam-toggle"
+          className="flex cursor-pointer items-start justify-between gap-3 rounded-xl border border-border/70 p-3 font-normal"
+        >
+          <span className="space-y-0.5">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              <Lock className="size-3.5" /> Faqat darsda
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              Mahallada va o'quvchining mustaqil testida chiqmaydi — darsdagi savol-javobda birinchi navbatda so'raladi.
+            </span>
+          </span>
+          <Switch id="question-exam-toggle" checked={examOnly} onCheckedChange={setExamOnly} />
+        </Label>
       </div>
 
       <DialogFooter>

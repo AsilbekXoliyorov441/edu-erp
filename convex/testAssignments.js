@@ -3,12 +3,13 @@ import { v } from 'convex/values'
 import { requireTestOwner, requireGroupOwner } from './lib/scoping'
 import { requireSession } from './lib/authz'
 
-async function countQuestions(ctx, testId) {
+/** `forStudent`: without the class-only questions, which a student's self-test leaves out. */
+async function countQuestions(ctx, testId, forStudent = false) {
   const questions = await ctx.db
     .query('testQuestions')
     .withIndex('by_test', (q) => q.eq('testId', testId))
     .collect()
-  return questions.length
+  return forStudent ? questions.filter((q) => !q.examOnly).length : questions.length
 }
 
 async function findAssignment(ctx, testId, groupId) {
@@ -62,7 +63,7 @@ export const listForMyGroup = query({
       .withIndex('by_group', (q) => q.eq('groupId', student.groupId))
       .collect()
     const tests = (await Promise.all(assignments.map((a) => ctx.db.get(a.testId)))).filter(Boolean)
-    return await Promise.all(tests.map(async (t) => ({ ...t, questionCount: await countQuestions(ctx, t._id) })))
+    return await Promise.all(tests.map(async (t) => ({ ...t, questionCount: await countQuestions(ctx, t._id, true) })))
   },
 })
 

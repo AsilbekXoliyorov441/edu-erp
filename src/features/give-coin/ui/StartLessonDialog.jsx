@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, CalendarCheck, Check, ListChecks, Play, Search } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, Check, ListChecks, Play, Search, Timer } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,44 @@ function toIsoWithCurrentTime(dayKey) {
 function defaultDay(lessons) {
   const today = getDayKey()
   return lessons.some((l) => getDayKey(l.date) === today) ? null : today
+}
+
+const SECONDS_KEY = 'lessonQuiz.secondsPerQuestion'
+
+/** The teacher's last pick, so the dialog opens on it next lesson. */
+function savedSeconds() {
+  try {
+    const value = Number(localStorage.getItem(SECONDS_KEY))
+    if (LESSON_QUIZ.SECONDS_OPTIONS.includes(value)) return value
+  } catch {
+    /* storage unavailable */
+  }
+  return LESSON_QUIZ.SECONDS_PER_QUESTION
+}
+
+function SecondsPicker({ value, onChange }) {
+  return (
+    <div className="mb-4">
+      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+        <Timer className="size-4 text-primary" /> Har bir savolga vaqt
+      </p>
+      <div className="grid grid-cols-4 gap-2">
+        {LESSON_QUIZ.SECONDS_OPTIONS.map((sec) => (
+          <button
+            key={sec}
+            type="button"
+            onClick={() => onChange(sec)}
+            className={cn(
+              'h-10 rounded-xl border-2 text-sm font-bold transition-colors',
+              value === sec ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-accent',
+            )}
+          >
+            {sec}s
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 /** Step 2: which topics the start-of-lesson Q&A is built from. Topics attached to this
@@ -100,6 +138,7 @@ export function StartLessonDialog({ group, onStart, disabled, lessons = [] }) {
   const [day, setDay] = useState(null)
   const [step, setStep] = useState('day')
   const [testIds, setTestIds] = useState([])
+  const [seconds, setSeconds] = useState(savedSeconds)
   const [starting, setStarting] = useState(false)
   const gradedToday = lessons.some((l) => getDayKey(l.date) === getDayKey())
 
@@ -109,7 +148,14 @@ export function StartLessonDialog({ group, onStart, disabled, lessons = [] }) {
     if (!day) return
     setStarting(true)
     try {
-      await onStart(toIsoWithCurrentTime(day), ids)
+      if (ids.length) {
+        try {
+          localStorage.setItem(SECONDS_KEY, String(seconds))
+        } catch {
+          /* storage unavailable */
+        }
+      }
+      await onStart(toIsoWithCurrentTime(day), ids, seconds)
       setOpen(false)
     } catch {
       /* the caller already showed the error */
@@ -134,6 +180,7 @@ export function StartLessonDialog({ group, onStart, disabled, lessons = [] }) {
           setDay(defaultDay(lessons))
           setStep('day')
           setTestIds([])
+          setSeconds(savedSeconds())
         }
       }}
     >
@@ -183,10 +230,11 @@ export function StartLessonDialog({ group, onStart, disabled, lessons = [] }) {
                 </DialogTitle>
                 <DialogDescription>
                   Qaysi mavzulardan tuzay? Har bir o'quvchiga {LESSON_QUIZ.QUESTION_COUNT} ta tasodifiy savol
-                  tushadi, har biriga {LESSON_QUIZ.SECONDS_PER_QUESTION} soniya. Har bir to'g'ri javob — 1 coin.
+                  tushadi, har biriga {seconds} soniya. Har bir to'g'ri javob — 1 coin.
                 </DialogDescription>
               </DialogHeader>
               <div className="py-4">
+                <SecondsPicker value={seconds} onChange={setSeconds} />
                 <TopicPicker group={group} selected={testIds} onToggle={toggleTest} />
               </div>
               <DialogFooter className="flex-wrap items-center gap-2 sm:justify-between">

@@ -189,11 +189,11 @@ export function GroupDetailPage() {
             group={group}
             lessons={groupLessons}
             disabled={groupStudents.length === 0}
-            onStart={async (date, testIds) => {
+            onStart={async (date, testIds, secondsPerQuestion) => {
               let newQuizId = null
               if (testIds.length) {
                 try {
-                  newQuizId = await quizActions.create(group.id, testIds)
+                  newQuizId = await quizActions.create(group.id, testIds, secondsPerQuestion)
                   toast.success("Savol-javob ochildi — o'quvchilarga bildirishnoma yuborildi")
                 } catch (err) {
                   toast.error(err?.data ?? "Savol-javobni ochib bo'lmadi")

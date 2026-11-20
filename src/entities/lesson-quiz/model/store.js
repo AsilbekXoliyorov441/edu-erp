@@ -28,7 +28,7 @@ export function useLessonQuizActions() {
   const start = useMutation(api.lessonQuiz.start)
   const answer = useMutation(api.lessonQuiz.answer)
   return {
-    create: (groupId, testIds) => create({ token, groupId, testIds }),
+    create: (groupId, testIds, secondsPerQuestion) => create({ token, groupId, testIds, secondsPerQuestion }),
     close: (quizId, lessonId) => close({ token, quizId, ...(lessonId ? { lessonId } : {}) }),
     start: (quizId) => start({ token, quizId }),
     answer: (attemptId, index, selectedIndex) => answer({ token, attemptId, index, selectedIndex }),

@@ -159,6 +159,8 @@ export default defineSchema({
     title: v.string(),
     /** Question pool from every chosen topic. */
     questionIds: v.array(v.id('testQuestions')),
+    /** Time per question the teacher picked (one of LESSON_QUIZ.SECONDS_OPTIONS). */
+    secondsPerQuestion: v.optional(v.number()),
     status: v.union(v.literal('active'), v.literal('closed')),
     createdAt: v.number(),
     closedAt: v.optional(v.number()),

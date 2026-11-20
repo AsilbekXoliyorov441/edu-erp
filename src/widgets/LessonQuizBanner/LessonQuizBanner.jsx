@@ -30,7 +30,7 @@ export function LessonQuizBanner() {
               <p className="truncate text-xs text-white/80">
                 {quiz.myStatus === 'active'
                   ? 'Testni davom ettiring — vaqt ketmoqda!'
-                  : `${LESSON_QUIZ.QUESTION_COUNT} ta savol, har biriga ${LESSON_QUIZ.SECONDS_PER_QUESTION} soniya · ${quiz.title}`}
+                  : `${LESSON_QUIZ.QUESTION_COUNT} ta savol, har biriga ${quiz.secondsPerQuestion} soniya · ${quiz.title}`}
               </p>
             </div>
             <span className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-sm font-black text-emerald-700 transition-transform group-hover:scale-105">

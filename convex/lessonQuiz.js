@@ -4,9 +4,9 @@ import { v, ConvexError } from 'convex/values'
 import { getScope, requireGroupOwner, requireTestOwner } from './lib/scoping'
 import { notify } from './lib/notify'
 import { shuffledOptions, storedIndex } from './lib/optionOrder'
-import { LESSON_QUIZ, STUDENT_STATUS } from '../src/shared/config/constants'
+import { LESSON_QUIZ, STUDENT_STATUS, lessonQuizSeconds } from '../src/shared/config/constants'
 
-const QUESTION_MS = LESSON_QUIZ.SECONDS_PER_QUESTION * 1000
+const questionMs = (quiz) => lessonQuizSeconds(quiz) * 1000
 
 function shuffle(list) {
   const arr = [...list]
@@ -68,8 +68,8 @@ async function findAttempt(ctx, quizId, studentId) {
     .unique()
 }
 
-async function scheduleTimeout(ctx, attempt) {
-  const delay = attempt.questionStartedAt - Date.now() + QUESTION_MS + LESSON_QUIZ.GRACE_MS
+async function scheduleTimeout(ctx, quiz, attempt) {
+  const delay = attempt.questionStartedAt - Date.now() + questionMs(quiz) + LESSON_QUIZ.GRACE_MS
   await ctx.scheduler.runAfter(Math.max(0, delay), internal.lessonQuiz.timeout, {
     attemptId: attempt._id,
     index: attempt.index,
@@ -77,7 +77,7 @@ async function scheduleTimeout(ctx, attempt) {
 }
 
 /** Records one answer (or a timeout with `selectedIndex` -1) and opens the next question. */
-async function recordAnswer(ctx, attempt, selectedIndex, correct) {
+async function recordAnswer(ctx, quiz, attempt, selectedIndex, correct) {
   const answers = [...attempt.answers, { selectedIndex, correct }]
   const index = attempt.index + 1
   const done = index >= attempt.questionIds.length
@@ -89,17 +89,24 @@ async function recordAnswer(ctx, attempt, selectedIndex, correct) {
     ...(done ? { status: 'done', finishedAt: Date.now() } : {}),
   }
   await ctx.db.patch(attempt._id, patch)
-  if (!done) await scheduleTimeout(ctx, { ...attempt, ...patch })
+  if (!done) await scheduleTimeout(ctx, quiz, { ...attempt, ...patch })
   return { correct, done, correctCount: patch.correctCount }
 }
 
 /** Teacher: opens the lesson's Q&A for a group from the chosen topics and notifies every
  * student. Any earlier open Q&A of the group is closed — one at a time per group. */
 export const create = mutation({
-  args: { token: v.string(), groupId: v.id('groups'), testIds: v.array(v.id('tests')) },
-  handler: async (ctx, { token, groupId, testIds }) => {
+  args: {
+    token: v.string(),
+    groupId: v.id('groups'),
+    testIds: v.array(v.id('tests')),
+    secondsPerQuestion: v.optional(v.number()),
+  },
+  handler: async (ctx, { token, groupId, testIds, secondsPerQuestion }) => {
     const session = await requireGroupOwner(ctx, token, groupId)
     if (testIds.length === 0) throw new ConvexError('Kamida bitta mavzu tanlang')
+    const seconds = secondsPerQuestion ?? LESSON_QUIZ.SECONDS_PER_QUESTION
+    if (!LESSON_QUIZ.SECONDS_OPTIONS.includes(seconds)) throw new ConvexError("Savol vaqti noto'g'ri")
 
     const titles = []
     const questionIds = []
@@ -129,6 +136,7 @@ export const create = mutation({
       testIds: [...new Set(testIds)],
       title,
       questionIds,
+      secondsPerQuestion: seconds,
       status: 'active',
       createdAt: Date.now(),
     })
@@ -143,7 +151,7 @@ export const create = mutation({
       {
         type: 'lesson_quiz',
         title: 'Darsdagi savol-javob boshlandi!',
-        body: `${LESSON_QUIZ.QUESTION_COUNT} ta savol, har biriga ${LESSON_QUIZ.SECONDS_PER_QUESTION} soniya — ${title}`,
+        body: `${LESSON_QUIZ.QUESTION_COUNT} ta savol, har biriga ${seconds} soniya — ${title}`,
       },
     )
     return quizId
@@ -209,6 +217,7 @@ export const activeForMe = query({
     return {
       id: quiz._id,
       title: quiz.title,
+      secondsPerQuestion: lessonQuizSeconds(quiz),
       myStatus: attempt?.status ?? 'new',
       correctCount: attempt?.correctCount ?? 0,
     }
@@ -227,6 +236,7 @@ export const getMine = query({
       quizId,
       title: quiz.title,
       open: isOpen(quiz),
+      secondsPerQuestion: lessonQuizSeconds(quiz),
       total: Math.min(LESSON_QUIZ.QUESTION_COUNT, quiz.questionIds.length),
     }
     if (!attempt) return { ...base, attempt: null }
@@ -283,7 +293,7 @@ export const start = mutation({
       status: 'active',
       startedAt: now,
     })
-    await scheduleTimeout(ctx, await ctx.db.get(attemptId))
+    await scheduleTimeout(ctx, quiz, await ctx.db.get(attemptId))
     return attemptId
   },
 })
@@ -308,12 +318,12 @@ export const answer = mutation({
 
     const elapsed = Date.now() - attempt.questionStartedAt
     if (elapsed < -LESSON_QUIZ.GRACE_MS) return { stale: true }
-    const inTime = elapsed <= QUESTION_MS + LESSON_QUIZ.GRACE_MS
+    const inTime = elapsed <= questionMs(quiz) + LESSON_QUIZ.GRACE_MS
     const question = await ctx.db.get(attempt.questionIds[index])
     // the options were shown shuffled — map the pick back to the stored order
     const picked = question ? storedIndex(selectedIndex, `${attempt._id}:${index}`, question.options.length) : -1
     const correct = inTime && picked >= 0 && question?.correctIndex === picked
-    return await recordAnswer(ctx, attempt, inTime ? picked : -1, correct)
+    return await recordAnswer(ctx, quiz, attempt, inTime ? picked : -1, correct)
   },
 })
 
@@ -323,6 +333,6 @@ export const timeout = internalMutation({
   handler: async (ctx, { attemptId, index }) => {
     const attempt = await ctx.db.get(attemptId)
     if (!attempt || attempt.status !== 'active' || attempt.index !== index) return
-    await recordAnswer(ctx, attempt, -1, false)
+    await recordAnswer(ctx, await ctx.db.get(attempt.quizId), attempt, -1, false)
   },
 })

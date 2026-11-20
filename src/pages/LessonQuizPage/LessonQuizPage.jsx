@@ -15,10 +15,9 @@ import {
   useLessonQuizActions,
   useMyLessonQuiz,
 } from '@/entities/lesson-quiz/model/store'
-import { LESSON_QUIZ, ROUTES } from '@/shared/config/constants'
+import { ROUTES } from '@/shared/config/constants'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F']
-const QUESTION_MS = LESSON_QUIZ.SECONDS_PER_QUESTION * 1000
 
 /** Ticks every 100ms against the server-corrected clock. */
 function useNow(offset, active) {
@@ -66,7 +65,7 @@ function Intro({ data, onStart, starting }) {
             <ListChecks className="size-4 text-primary" /> {data.total} ta savol, ketma-ket
           </li>
           <li className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2">
-            <Timer className="size-4 text-primary" /> Har bir savolga {LESSON_QUIZ.SECONDS_PER_QUESTION} soniya
+            <Timer className="size-4 text-primary" /> Har bir savolga {data.secondsPerQuestion} soniya
           </li>
           <li className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2">
             <Coins className="size-4 text-warning" /> Har bir to'g'ri javob — 1 coin
@@ -116,7 +115,8 @@ function Question({ data, now, onAnswer }) {
   const { attempt, question, total } = data
   const [picked, setPicked] = useState(null)
   const waiting = now < attempt.questionStartedAt
-  const remainingMs = Math.max(0, attempt.questionStartedAt + QUESTION_MS - now)
+  const questionMs = data.secondsPerQuestion * 1000
+  const remainingMs = Math.max(0, attempt.questionStartedAt + questionMs - now)
   const remainingSec = Math.ceil(remainingMs / 1000)
   const lastAnswer = attempt.index > 0 ? attempt.answers[attempt.index - 1] : null
   const timeoutSent = useRef(-1)
@@ -187,7 +187,7 @@ function Question({ data, now, onAnswer }) {
           <div className="h-1.5 bg-muted">
             <div
               className={cn('h-full transition-[width] duration-100 ease-linear', remainingSec <= 3 ? 'bg-destructive' : 'bg-primary')}
-              style={{ width: `${(remainingMs / QUESTION_MS) * 100}%` }}
+              style={{ width: `${(remainingMs / questionMs) * 100}%` }}
             />
           </div>
           <CardContent className="space-y-4 p-6">

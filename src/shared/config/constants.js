@@ -128,7 +128,9 @@ export function homeworkLanguageFor(direction) {
  * coin per correct answer, so the count matches the Savol-javob category max. */
 export const LESSON_QUIZ = {
   QUESTION_COUNT: 5,
-  SECONDS_PER_QUESTION: 10,
+  /** Default time per question; the teacher picks one of `SECONDS_OPTIONS` before the lesson. */
+  SECONDS_PER_QUESTION: 20,
+  SECONDS_OPTIONS: [10, 15, 20, 25],
   /** The 3-2-1 before the first question. */
   LEAD_IN_MS: 3000,
   /** How long the right/wrong result stays on screen before the next question. */
@@ -142,6 +144,11 @@ export const LESSON_QUIZ = {
 /** Live quiz games ("jonli o'yinlar"). Points per correct answer fall from `MAX_POINTS` to
  * `MIN_POINTS` the longer the student takes; every correct answer in a row adds
  * `STREAK_BONUS` more (capped at `MAX_STREAK_BONUS`). The last question counts double. */
+/** Seconds per question of a quiz — its own choice, or the default for older quizzes. */
+export function lessonQuizSeconds(quiz) {
+  return quiz?.secondsPerQuestion ?? LESSON_QUIZ.SECONDS_PER_QUESTION
+}
+
 export const GAME_RULES = {
   MAX_POINTS: 1000,
   MIN_POINTS: 500,
